@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 void main() {
-  runApp(TaskManagerApp());
+  runApp(const TaskManagerApp()); // const eklendi
 }
 
 class TaskManagerApp extends StatelessWidget {
@@ -20,7 +20,7 @@ class TaskManagerApp extends StatelessWidget {
       title: 'Task Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: TaskManagerScreen(),
+      home: const TaskManagerScreen(), // const eklendi
     );
   }
 }
@@ -32,7 +32,6 @@ class TaskManagerScreen extends StatefulWidget {
   _TaskManagerScreenState createState() => _TaskManagerScreenState();
 }
 
-// Sıralama durumunu tutmak için yeni değişkenler ekleyelim
 class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTickerProviderStateMixin {
   int? sortColumnIndex;
   bool isAscending = true;
@@ -46,11 +45,11 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   TextEditingController categoryController = TextEditingController();
   String selectedCategory = "";
   DateTime? selectedDeadline;
-  int completionPercentage = 0; // Completion percentage
+  int completionPercentage = 0;
 
   final List<String> statuses = ["Not Started", "In Progress", "Complete"];
-  final List<String> priorities = ["High", "Medium", "Low"]; // Priority values
-  String selectedPriority = "Medium"; // Default priority
+  final List<String> priorities = ["High", "Medium", "Low"];
+  String selectedPriority = "Medium";
 
   Map<String, List<Map<String, dynamic>>> categorizedTasks = {
     "Not Started": [],
@@ -61,19 +60,19 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   DateTime? filterDate;
   List<Map<String, dynamic>> filteredTasks = [];
 
-  bool isTableView = false; // Varsayılan olarak liste görünümü
+  bool isTableView = true; // false yerine true yaptık
 
   List<DataColumn> tableColumns = [
     DataColumn(label: Text('Task Name')),
     DataColumn(label: Text('Deadline')),
     DataColumn(label: Text('Category')),
     DataColumn(label: Text('Priority')),
-    DataColumn(label: Text('Status')), // Yeni sütun
+    DataColumn(label: Text('Status')),
     DataColumn(label: Text('Effort (hour)')),
     DataColumn(label: Text('Completion')),
   ];
 
-  String selectedFilterColumn = ''; // Seçilen sütun
+  String selectedFilterColumn = '';
   final List<String> filterColumns = [
     'Task Name',
     'Category',
@@ -86,9 +85,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this); // TabController length updated to 4
-    sortTasksByDeadline(); // Varsayılan olarak artan sıralama
-    filteredTasks = tasks; // Tüm görevlerin başlangıçta görünmesini sağla
+    _tabController = TabController(length: 3, vsync: this);
+    sortTasksByDeadline();
+    filteredTasks = tasks;
   }
 
   @override
@@ -97,12 +96,273 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     taskController.dispose();
     effortController.dispose();
     descriptionController.dispose();
-    filterController.dispose(); // Yeni controller'ı ekleyelim
+    filterController.dispose();
     super.dispose();
   }
 
-  String selectedStatus = "Not Started"; // Varsayılan durum
+  String selectedStatus = "Not Started";
 
+  // Pop-up'ta görev ekleme işlemi - düzeltilmiş hali
+  void showAddTaskDialog() {
+    // Dialog açılmadan önce değerleri sıfırla
+    taskController.clear();
+    effortController.clear();
+    descriptionController.clear();
+    categoryController.clear();
+    selectedDeadline = null;
+    selectedStatus = "Not Started";
+    selectedPriority = "Medium";
+    completionPercentage = 0;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        String errorMessage = ""; // Hata mesajı için değişken
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("New Task"),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Hata mesajını göster
+                      if (errorMessage.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(8.0),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            border: Border.all(color: Colors.red),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error, color: Colors.red, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  errorMessage,
+                                  style: TextStyle(color: Colors.red.shade700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      TextField(
+                        controller: taskController,
+                        decoration: const InputDecoration(
+                          labelText: "Task Name",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: selectedStatus,
+                        decoration: const InputDecoration(
+                          labelText: "Status",
+                          border: OutlineInputBorder(),
+                        ),
+                        items: statuses.map((String status) {
+                          return DropdownMenuItem<String>(
+                            value: status,
+                            child: Text(status),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          setDialogState(() {
+                            selectedStatus = newValue!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: selectedPriority,
+                        decoration: const InputDecoration(
+                          labelText: "Priority",
+                          border: OutlineInputBorder(),
+                        ),
+                        items: priorities.map((String priority) {
+                          return DropdownMenuItem<String>(
+                            value: priority,
+                            child: Text(priority),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          setDialogState(() {
+                            selectedPriority = newValue!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: effortController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Total Effort (hour)",
+                          border: OutlineInputBorder(),
+                        ),
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: "Description",
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: categoryController,
+                        decoration: const InputDecoration(
+                          labelText: "Category",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: () async {
+                          DateTime? pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100),
+                          );
+                          if (pickedDate != null) {
+                            setDialogState(() {
+                              selectedDeadline = pickedDate;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: "Deadline",
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                selectedDeadline != null
+                                    ? DateFormat('dd/MM/yyyy').format(selectedDeadline!)
+                                    : "Choose date",
+                              ),
+                              const Icon(Icons.calendar_today),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: "Percentage of Completion",
+                          border: OutlineInputBorder(),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("$completionPercentage%"),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          if (completionPercentage > 0) {
+                                            completionPercentage -= 25;
+                                          }
+                                        });
+                                      },
+                                      icon: const Icon(Icons.remove),
+                                    ),
+                                    IconButton(
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          if (completionPercentage < 100) {
+                                            completionPercentage += 25;
+                                          }
+                                        });
+                                      },
+                                      icon: const Icon(Icons.add),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            LinearProgressIndicator(
+                              value: completionPercentage / 100,
+                              backgroundColor: Colors.grey[300],
+                              color: getCompletionColor(),
+                              minHeight: 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Validasyon kontrolü
+                    if (taskController.text.isEmpty ||
+                        selectedDeadline == null ||
+                        effortController.text.isEmpty ||
+                        categoryController.text.isEmpty) {
+                      
+                      setDialogState(() {
+                        errorMessage = "Please fill in all fields!";
+                      });
+                      return; // Dialog'u kapatmadan çık
+                    }
+
+                    // Validasyon başarılı ise görevi ekle ve dialog'u kapat
+                    addTaskFromDialog();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text("Add Task"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Dialog'dan görev ekleme işlemi için ayrı metod
+  void addTaskFromDialog() {
+    setState(() {
+      Map<String, dynamic> newTask = {
+        "title": taskController.text,
+        "deadline": selectedDeadline!.toIso8601String(),
+        "effort": int.tryParse(effortController.text) ?? 0,
+        "description": descriptionController.text,
+        "status": selectedStatus,
+        "category": categoryController.text,
+        "priority": selectedPriority,
+        "completionPercentage": completionPercentage,
+      };
+
+      tasks.add(newTask);
+      categorizedTasks[selectedStatus]!.add(newTask);
+      sortTasksByDeadline(ascending: isAscending);
+      filteredTasks = tasks;
+    });
+  }
+
+  // Eski addTask metodunu güncelleyelim (artık sadece ScaffoldMessenger kullanacak)
   void addTask() {
     if (taskController.text.isEmpty ||
         selectedDeadline == null ||
@@ -125,25 +385,14 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         "description": descriptionController.text,
         "status": selectedStatus,
         "category": categoryController.text,
-        "priority": selectedPriority, // Add priority to the task
-        "completionPercentage": completionPercentage, // Add completion percentage to the task
+        "priority": selectedPriority,
+        "completionPercentage": completionPercentage,
       };
 
       tasks.add(newTask);
       categorizedTasks[selectedStatus]!.add(newTask);
       sortTasksByDeadline(ascending: isAscending);
-
-      // Update filteredTasks after adding a new task
       filteredTasks = tasks;
-
-      taskController.clear();
-      effortController.clear();
-      descriptionController.clear();
-      categoryController.clear();
-      selectedDeadline = null;
-      selectedStatus = "Not Started";
-      selectedPriority = "Medium"; // Reset priority to default
-      completionPercentage = 0; // Reset completion percentage to 0
     });
   }
 
@@ -197,15 +446,13 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
           content: Text("Are you sure want to delete task?"),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Dialogu kapat
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: Text("No"),
             ),
             TextButton(
               onPressed: () {
                 deleteTask(task);
-                Navigator.of(context).pop(); // Dialogu kapat
+                Navigator.of(context).pop();
               },
               child: Text("Yes"),
             ),
@@ -324,22 +571,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }).toList();
   }
 
-  void incrementCompletion() {
-    setState(() {
-      if (completionPercentage < 100) {
-        completionPercentage += 25;
-      }
-    });
-  }
-
-  void decrementCompletion() {
-    setState(() {
-      if (completionPercentage > 0) {
-        completionPercentage -= 25;
-      }
-    });
-  }
-
   Color getCompletionColor() {
     if (completionPercentage == 100) {
       return Colors.green;
@@ -350,7 +581,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }
   }
 
-  // Method to get the color of the completion bar based on the index
+  // LinearProgressIndicator için color düzeltmesi
   Color getCompletionBarColor(int index) {
     switch (index) {
       case 0:
@@ -366,279 +597,309 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }
   }
 
-  // Sütun düzenini değiştirmek için yeni bir method
-  void reorderColumns(int oldIndex, int newIndex) {
-    setState(() {
-      if (oldIndex < newIndex) {
-        newIndex -= 1;
-      }
-      final DataColumn item = tableColumns.removeAt(oldIndex);
-      tableColumns.insert(newIndex, item);
-    });
+  // Status bölümündeki LinearProgressIndicator düzeltmesi
+  Widget buildStatusTab() {
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Text(
+            "Status",
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: statuses.map((status) {
+              Color backgroundColor;
+              if (status == "Not Started") {
+                backgroundColor = Colors.grey;
+              } else if (status == "Complete") {
+                backgroundColor = Colors.green;
+              } else {
+                backgroundColor = Colors.blueAccent;
+              }
+
+              return Expanded(
+                child: DragTarget<Map<String, dynamic>>(
+                  onAcceptWithDetails: (details) {
+                    var task = details.data;
+                    moveTask(task["status"], status, task);
+                  },
+                  builder: (context, candidateData, rejectedData) {
+                    return Card(
+                      margin: const EdgeInsets.all(8),
+                      elevation: 3,
+                      child: Column(
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            color: backgroundColor,
+                            child: Text(
+                              status,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: categorizedTasks[status]!.length,
+                              itemBuilder: (context, index) {
+                                var task = categorizedTasks[status]![index];
+                                int completionPercentage = task["completionPercentage"];
+                                return Draggable<Map<String, dynamic>>(
+                                  data: task,
+                                  feedback: Material(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      color: Colors.grey[300],
+                                      child: Text(task["title"]),
+                                    ),
+                                  ),
+                                  childWhenDragging: Container(),
+                                  child: Card(
+                                    child: ListTile(
+                                      title: Text(task["title"]),
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Deadline: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(task['deadline']))}",
+                                          ),
+                                          Text("Category: ${task['category'] ?? ''}"),
+                                          Text("Priority: ${task['priority'] ?? ''}"),
+                                          const SizedBox(height: 5),
+                                          LinearProgressIndicator(
+                                            value: completionPercentage / 100,
+                                            backgroundColor: Colors.grey[300],
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                              completionPercentage == 0 ? Colors.grey :
+                                              completionPercentage <= 25 ? Colors.red :
+                                              completionPercentage <= 50 ? Colors.orange :
+                                              completionPercentage <= 75 ? Colors.blue :
+                                              Colors.green
+                                            ),
+                                            minHeight: 10,
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text("Completion: $completionPercentage%"),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
   }
 
-  // buildDraggableDataTable metodunu güncelleyelim
-  Widget buildDraggableDataTable() {
-    return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columns: List.generate(tableColumns.length, (index) {
-            String columnText = '';
-            if (tableColumns[index].label is Text) {
-              columnText = (tableColumns[index].label as Text).data ?? '';
-            }
-
-            return DataColumn(
-              label: Row(
-                children: [
-                  Text(
-                    columnText,
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(width: 4),
-                  InkWell(
-                    onTap: () => onSort(index, true),
-                    child: Icon(
-                      Icons.arrow_upward,
-                      size: 16,
-                      color: columnSortDirections[index] == true ? Colors.blue : Colors.grey,
+  // Filter section widget for filtering tasks by date or category
+  Widget buildFilterSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      child: Row(
+        children: [
+          // Date filter
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                DateTime? pickedDate = await showDatePicker(
+                  context: context,
+                  initialDate: filterDate ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100),
+                );
+                if (pickedDate != null) {
+                  filterTasksByDate(pickedDate);
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: "Filter by Deadline",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      filterDate != null
+                          ? DateFormat('dd/MM/yyyy').format(filterDate!)
+                          : "Choose date",
                     ),
-                  ),
-                  InkWell(
-                    onTap: () => onSort(index, false),
-                    child: Icon(
-                      Icons.arrow_downward,
-                      size: 16,
-                      color: columnSortDirections[index] == false ? Colors.blue : Colors.grey,
-                    ),
-                  ),
-                ],
+                    if (filterDate != null)
+                      IconButton(
+                        icon: Icon(Icons.clear, size: 18),
+                        onPressed: clearFilter,
+                        tooltip: "Clear date filter",
+                      ),
+                  ],
+                ),
               ),
-            );
-          }),
-          rows: filteredTasks.map((task) {
-            return DataRow(
-              cells: List.generate(tableColumns.length, (columnIndex) {
-                return _buildDataCell(task, columnIndex);
-              }),
-            );
-          }).toList(),
-        ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Category filter
+          Expanded(
+            child: TextField(
+              controller: filterController,
+              decoration: InputDecoration(
+                labelText: "Filter by Category",
+                border: OutlineInputBorder(),
+                suffixIcon: filterController.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.clear),
+                        onPressed: () {
+                          filterController.clear();
+                          filterTasksByCategory('');
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (value) {
+                filterTasksByCategory(value);
+                setState(() {
+                  selectedCategory = value;
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Clear all filters button
+          ElevatedButton(
+            onPressed: clearFilter,
+            child: const Text("Clear"),
+          ),
+        ],
       ),
     );
   }
 
-  // Sıralama işlemi için yeni bir metod ekleyelim
-  void onSort(int columnIndex, bool ascending) {
-    setState(() {
-      columnSortDirections[columnIndex] = ascending;
-
-      filteredTasks.sort((a, b) {
-        var aValue = getColumnValue(a, columnIndex);
-        var bValue = getColumnValue(b, columnIndex);
-
-        if (aValue == null || bValue == null) {
-          return 0;
-        }
-
-        int comparison;
-        if (aValue is num && bValue is num) {
-          comparison = aValue.compareTo(bValue);
-        } else if (aValue is DateTime && bValue is DateTime) {
-          comparison = aValue.compareTo(bValue);
-        } else {
-          comparison = aValue.toString().compareTo(bValue.toString());
-        }
-
-        return ascending ? comparison : -comparison;
-      });
-    });
-  }
-
-  // Sütun değerini almak için yardımcı metod
-  dynamic getColumnValue(Map<String, dynamic> task, int columnIndex) {
-    switch (columnIndex) {
-      case 0:
-        return task['title'];
-      case 1:
-        return DateTime.parse(task['deadline']);
-      case 2:
-        return task['category'];
-      case 3:
-        return task['priority'];
-      case 4:
-        return task['status'];
-      case 5:
-        return task['effort'];
-      case 6:
-        return task['completionPercentage'];
-      default:
-        return null;
-    }
-  }
-
-  // Her bir hücreyi oluşturan yardımcı method
-  DataCell _buildDataCell(Map<String, dynamic> task, int columnIndex) {
-    switch (columnIndex) {
-      case 0:
-        return DataCell(
-          Text(task["title"]),
-          onTap: () => _onTaskTap(task),
-        );
-      case 1:
-        return DataCell(Text(DateFormat('dd/MM/yyyy').format(DateTime.parse(task['deadline']))));
-      case 2:
-        return DataCell(Text(task['category'] ?? ''));
-      case 3:
-        return DataCell(Text(task['priority'] ?? ''));
-      case 4:
-        return DataCell(Text(task['status'] ?? '')); // Yeni hücre
-      case 5:
-        return DataCell(Text('${task['effort']}'));
-      case 6:
-        return DataCell(
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: List.generate(4, (barIndex) {
-                  return Expanded(
-                    child: Container(
-                      height: 10,
-                      margin: EdgeInsets.symmetric(horizontal: 2),
-                      color: barIndex < (task['completionPercentage'] / 25)
-                          ? (task['completionPercentage'] == 25 ? Colors.grey
-                            : task['completionPercentage'] == 50 ? Colors.red
-                            : task['completionPercentage'] == 75 ? Colors.blue
-                            : task['completionPercentage'] == 100 ? Colors.green
-                            : Colors.grey[300])
-                          : Colors.grey[300],
-                    ),
-                  );
-                }),
-              ),
-              Text('${task['completionPercentage']}%'),
-            ],
+  Widget buildDraggableDataTable() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        sortColumnIndex: sortColumnIndex,
+        sortAscending: isAscending,
+        columns: [
+          DataColumn(
+            label: const Text('Task Name'),
+            onSort: (columnIndex, ascending) {
+              setState(() {
+                sortColumnIndex = columnIndex;
+                isAscending = ascending;
+                filteredTasks.sort((a, b) => ascending
+                    ? a['title'].compareTo(b['title'])
+                    : b['title'].compareTo(a['title']));
+              });
+            },
           ),
-        );
-      default:
-        return DataCell(Text(''));
-    }
-  }
-
-  void _onTaskTap(Map<String, dynamic> task) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => TaskDetailScreen(task: task),
-      ),
-    ).then((updatedTask) {
-      if (updatedTask != null) {
-        setState(() {
-          int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
-          tasks[taskIndex] = updatedTask;
-          if (filterDate != null) {
-            filterTasksByDate(filterDate!);
-          }
-          if (selectedCategory.isNotEmpty) {
-            filterTasksByCategory(selectedCategory);
-          }
-        });
-      }
-    });
-  }
-
-  // Yeni filtreleme metodu
-  void filterTasks(String column, String value) {
-    setState(() {
-      if (value.isEmpty) {
-        filteredTasks = tasks;
-      } else {
-        filteredTasks = tasks.where((task) {
-          switch (column) {
-            case 'Task Name':
-              return task['title'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Category':
-              return task['category'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Priority':
-              return task['priority'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Status':
-              return task['status'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Effort':
-              return task['effort'].toString().contains(value);
-            default:
-              return false;
-          }
-        }).toList();
-      }
-    });
-  }
-
-  // Görev Listesi tab'ındaki filtreleme alanını güncelleyelim
-  Widget buildFilterSection() {
-    return Container(
-      padding: EdgeInsets.all(8),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: selectedFilterColumn.isEmpty ? null : selectedFilterColumn,
-                  decoration: InputDecoration(
-                    labelText: "Filter",
-                    border: OutlineInputBorder(),
-                  ),
-                  hint: Text('Choose column'),
-                  items: filterColumns.map((String column) {
-                    return DropdownMenuItem<String>(
-                      value: column,
-                      child: Text(column),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      selectedFilterColumn = newValue ?? '';
-                      filterController.clear();
-                      filteredTasks = tasks; // Reset filtreleme
-                    });
-                  },
-                ),
-              ),
-              SizedBox(width: 8),
-              IconButton(
-                icon: Icon(Icons.clear),
-                onPressed: () {
-                  setState(() {
-                    selectedFilterColumn = '';
-                    filterController.clear();
-                    filteredTasks = tasks;
-                  });
-                },
-                tooltip: 'Clear filter',
-              ),
-            ],
+          DataColumn(
+            label: const Text('Deadline'),
+            onSort: (columnIndex, ascending) {
+              setState(() {
+                sortColumnIndex = columnIndex;
+                isAscending = ascending;
+                filteredTasks.sort((a, b) => ascending
+                    ? DateTime.parse(a['deadline']).compareTo(DateTime.parse(b['deadline']))
+                    : DateTime.parse(b['deadline']).compareTo(DateTime.parse(a['deadline'])));
+              });
+            },
           ),
-          if (selectedFilterColumn.isNotEmpty) ...[
-            SizedBox(height: 8),
-            TextField(
-              controller: filterController,
-              decoration: InputDecoration(
-                labelText: "Filter for $selectedFilterColumn  ",
-                border: OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    filterController.clear();
-                    filterTasks(selectedFilterColumn, '');
-                  },
-                ),
-              ),
-              onChanged: (value) => filterTasks(selectedFilterColumn, value),
-            ),
-          ],
+          DataColumn(label: const Text('Category')),
+          DataColumn(label: const Text('Priority')),
+          DataColumn(label: const Text('Status')),
+          DataColumn(label: const Text('Effort (hour)')),
+          DataColumn(label: const Text('Completion')),
+          DataColumn(label: const Text('Actions')),
         ],
+        rows: filteredTasks.map((task) {
+          int completionPercentage = task["completionPercentage"];
+          return DataRow(
+            cells: [
+              DataCell(Text(task['title'])),
+              DataCell(Text(DateFormat('dd/MM/yyyy').format(DateTime.parse(task['deadline'])))),
+              DataCell(Text(task['category'] ?? '')),
+              DataCell(Text(task['priority'] ?? '')),
+              DataCell(Text(task['status'] ?? '')),
+              DataCell(Text(task['effort'].toString())),
+              DataCell(
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 60,
+                      child: LinearProgressIndicator(
+                        value: completionPercentage / 100,
+                        backgroundColor: Colors.grey[300],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          completionPercentage == 0 ? Colors.grey :
+                          completionPercentage <= 25 ? Colors.red :
+                          completionPercentage <= 50 ? Colors.orange :
+                          completionPercentage <= 75 ? Colors.blue :
+                          Colors.green
+                        ),
+                        minHeight: 10,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text("$completionPercentage%"),
+                  ],
+                ),
+              ),
+              DataCell(
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    confirmDeleteTask(context, task);
+                  },
+                ),
+              ),
+            ],
+            onSelectChanged: (_) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TaskDetailScreen(task: task),
+                ),
+              ).then((updatedTask) {
+                if (updatedTask != null) {
+                  setState(() {
+                    int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
+                    if (taskIndex != -1) {
+                      tasks[taskIndex] = updatedTask;
+                    }
+                    if (filterDate != null) {
+                      filterTasksByDate(filterDate!);
+                    }
+                    if (selectedCategory.isNotEmpty) {
+                      filterTasksByCategory(selectedCategory);
+                    }
+                  });
+                }
+              });
+            },
+          );
+        }).toList(),
       ),
     );
   }
@@ -647,476 +908,206 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Task Manager"),
+        title: const Text("Task Manager"),
         actions: [
           IconButton(
-            icon: Icon(Icons.save),
+            icon: const Icon(Icons.save),
             tooltip: "Save the datas",
             onPressed: saveTasksToDirectory,
           ),
           IconButton(
-            icon: Icon(Icons.folder_open),
+            icon: const Icon(Icons.folder_open),
             tooltip: "Load the datas",
             onPressed: loadTasksFromFile,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: [
-            Tab(text: "Creating New Task"),
+          tabs: const [
             Tab(text: "Task List"),
             Tab(text: "Status"),
-            Tab(text: "Reports"), // Yeni Tab
+            Tab(text: "Reports"),
           ],
         ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              // 1. Tab: Görev Ekle - Düzenlenmiş hali
-              SingleChildScrollView(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Sol taraf - Form alanları
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.5, // Ekranın sol yarısı
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TextField(
-                              controller: taskController,
-                              decoration: InputDecoration(
-                                labelText: "Task Name",
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            DropdownButtonFormField<String>(
-                              value: selectedStatus,
-                              decoration: InputDecoration(
-                                labelText: "Status ",
-                                border: OutlineInputBorder(),
-                              ),
-                              items: statuses.map((String status) {
-                                return DropdownMenuItem<String>(
-                                  value: status,
-                                  child: Text(status),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                setState(() {
-                                  selectedStatus = newValue!;
-                                });
-                              },
-                            ),
-                            SizedBox(height: 10),
-                            DropdownButtonFormField<String>(
-                              value: selectedPriority, // Varsayılan değer: "Medium"
-                              decoration: InputDecoration(
-                                labelText: "Priority",
-                                border: OutlineInputBorder(),
-                              ),
-                              items: priorities.map((String priority) {
-                                return DropdownMenuItem<String>(
-                                  value: priority,
-                                  child: Text(priority),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                setState(() {
-                                  selectedPriority = newValue!;
-                                });
-                              },
-                            ),
-                            SizedBox(height: 10),
-                            TextField(
-                              controller: effortController,
-                              keyboardType: TextInputType.number,
-                              decoration: InputDecoration(
-                                labelText: "Total Effort (hour)",
-                                border: OutlineInputBorder(),
-                              ),
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            ),
-                            SizedBox(height: 10),
-                            TextField(
-                              controller: descriptionController,
-                              decoration: InputDecoration(
-                                labelText: "Description",
-                                border: OutlineInputBorder(),
-                              ),
-                              maxLines: 3,
-                            ),
-                            SizedBox(height: 10),
-                            TextField(
-                              controller: categoryController,
-                              decoration: InputDecoration(
-                                labelText: "Category",
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            InkWell(
-                              onTap: pickDeadline,
-                              child: InputDecorator(
-                                decoration: InputDecoration(
-                                  labelText: "Deadline",
-                                  border: OutlineInputBorder(),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      selectedDeadline != null
-                                          ? DateFormat('dd/MM/yyyy').format(selectedDeadline!)
-                                          : "Choose date",
-                                    ),
-                                    Icon(Icons.calendar_today),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: "Percentage of Completion",
-                                    border: OutlineInputBorder(),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text("$completionPercentage%"),
-                                          Row(
-                                            children: [
-                                              IconButton(
-                                                onPressed: decrementCompletion,
-                                                icon: Icon(Icons.remove),
-                                              ),
-                                              IconButton(
-                                                onPressed: incrementCompletion,
-                                                icon: Icon(Icons.add),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      LinearProgressIndicator(
-                                        value: completionPercentage / 100,
-                                        backgroundColor: Colors.grey[300],
-                                        color: getCompletionColor(),
-                                        minHeight: 10,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: addTask,
-                              child: Text("Add"),
-                            ),
-                          ],
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          // 1. Tab: Görev Listesi (New Task butonu ile)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Task List",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                      ),
+                        ElevatedButton.icon(
+                          onPressed: showAddTaskDialog,
+                          icon: const Icon(Icons.add),
+                          label: const Text("New Task"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
-                    // Sağ taraf - Boş veya ileride eklenecek içerik için
-                    Expanded(
-                      child: Container(),
-                    ),
-                  ],
-                ),
-              ),
-              // 2. Tab: Görev Listesi
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  bool isMobile = constraints.maxWidth < 600;
-                  return Column(
+                  ),
+                  buildFilterSection(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start, // changed from spaceBetween
-                          children: [
-                            Text(
-                              "List",
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            isTableView = false;
+                          });
+                        },
+                        icon: const Icon(Icons.list),
+                        label: const Text("List View"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: !isTableView ? Colors.blue : Colors.grey,
                         ),
                       ),
-                      buildFilterSection(), // Yeni filtreleme alanını ekleyelim
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                isTableView = false;
-                              });
-                            },
-                            icon: Icon(Icons.list),
-                            label: Text("List View"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: !isTableView ? Colors.blue : Colors.grey,
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                isTableView = true;
-                              });
-                            },
-                            icon: Icon(Icons.grid_on),
-                            label: Text("Table View"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isTableView ? Colors.blue : Colors.grey,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            isTableView = true;
+                          });
+                        },
+                        icon: const Icon(Icons.grid_on),
+                        label: const Text("Table View"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isTableView ? Colors.blue : Colors.grey,
+                        ),
                       ),
-                      Expanded(
-                        child: isTableView
-                            ? buildDraggableDataTable()
-                            : ListView.builder(
-                                itemCount: filteredTasks.length,
-                                itemBuilder: (context, index) {
-                                  var task = filteredTasks[index];
-                                  DateTime deadlineDate = DateTime.parse(task['deadline']);
-                                  int completionPercentage = task["completionPercentage"];
-                                  return Card(
-                                    elevation: 2,
-                                    margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    child: ListTile(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => TaskDetailScreen(task: task),
-                                          ),
-                                        ).then((updatedTask) {
-                                          if (updatedTask != null) {
-                                            setState(() {
-                                              int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
-                                              tasks[taskIndex] = updatedTask;
-                                              if (filterDate != null) {
-                                                filterTasksByDate(filterDate!);
-                                              }
-                                              if (selectedCategory.isNotEmpty) {
-                                                filterTasksByCategory(selectedCategory);
-                                              }
-                                            });
-                                          }
-                                        });
-                                      },
-                                      title: Text(task["title"]),
-                                      subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)}\nEffort: ${task['effort']} hour",
-                                          ),
-                                          if (task["description"] != null && task["description"].toString().isNotEmpty)
-                                            Text("Description: ${task["description"]}"),
-                                          if (task["category"] != null && task["category"].toString().isNotEmpty)
-                                            Text("Category: ${task["category"]}"),
-                                          if (task["priority"] != null && task["priority"].toString().isNotEmpty)
-                                            Text("priority: ${task["priority"]}"),
-                                          SizedBox(height: 5),
-                                          Row(
-                                            children: [
-                                              SizedBox(
-                                                width: MediaQuery.of(context).size.width / 4, // Ekran genişliğinin 4'te 1'i
-                                                child: Row(
-                                                  children: List.generate(4, (barIndex) {
-                                                    return Expanded(
-                                                      child: Container(
-                                                        height: 10,
-                                                        margin: EdgeInsets.symmetric(horizontal: 2),
-                                                        color: barIndex < (completionPercentage / 25)
-                                                            ? (completionPercentage == 25 ? Colors.grey
-                                                              : completionPercentage == 50 ? Colors.red
-                                                              : completionPercentage == 75 ? Colors.blue
-                                                              : completionPercentage == 100 ? Colors.green
-                                                              : Colors.grey[300])
-                                                            : Colors.grey[300],
-                                                      ),
-                                                    );
-                                                  }),
-                                                ),
-                                              ),
-                                              SizedBox(width: 8), // Bar ile yüzde arasında boşluk
-                                              Text("$completionPercentage%"), // Yüzde değeri
-                                            ],
-                                          ),
-                                        ],
+                    ],
+                  ),
+                  Expanded(
+                    child: isTableView
+                        ? buildDraggableDataTable()
+                        : ListView.builder(
+                            itemCount: filteredTasks.length,
+                            itemBuilder: (context, index) {
+                              var task = filteredTasks[index];
+                              DateTime deadlineDate = DateTime.parse(task['deadline']);
+                              int completionPercentage = task["completionPercentage"];
+                              return Card(
+                                elevation: 2,
+                                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                child: ListTile(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => TaskDetailScreen(task: task),
                                       ),
-                                      trailing: IconButton(
-                                        icon: Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () {
-                                          confirmDeleteTask(context, task);
+                                    ).then((updatedTask) {
+                                      if (updatedTask != null) {
+                                        setState(() {
+                                          int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
+                                          if (taskIndex != -1) {
+                                            tasks[taskIndex] = updatedTask;
+                                          }
                                           if (filterDate != null) {
                                             filterTasksByDate(filterDate!);
                                           }
                                           if (selectedCategory.isNotEmpty) {
                                             filterTasksByCategory(selectedCategory);
                                           }
-                                        },
+                                        });
+                                      }
+                                    });
+                                  },
+                                  title: Text(task["title"]),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)}\nEffort: ${task['effort']} hour",
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              // 3. Tab: Görev Statüleri
-              Column(
-                children: [
-                  Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: Text(
-                      "Status",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: statuses.map((status) {
-                        Color backgroundColor;
-                        if (status == "Not Started") {
-                          backgroundColor = Colors.grey;
-                        } else if (status == "Complete") {
-                          backgroundColor = Colors.green;
-                        } else {
-                          backgroundColor = Colors.blueAccent;
-                        }
-
-                        return Expanded(
-                          child: DragTarget<Map<String, dynamic>>(
-                            onAcceptWithDetails: (details) {
-                              var task = details.data;
-                              moveTask(task["status"], status, task);
-                            },
-                            builder: (context, candidateData, rejectedData) {
-                              return Card(
-                                margin: EdgeInsets.all(8),
-                                elevation: 3,
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      width: double.infinity, // Makes container fill the card width
-                                      padding: EdgeInsets.symmetric(vertical: 12), // Increased padding
-                                      color: backgroundColor,
-                                      child: Text(
-                                        status,
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16, // Increased font size
-                                        ),
-                                        textAlign: TextAlign.center, // Center the text
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        itemCount: categorizedTasks[status]!.length,
-                                        itemBuilder: (context, index) {
-                                          var task = categorizedTasks[status]![index];
-                                          int completionPercentage = task["completionPercentage"];
-                                          return Draggable<Map<String, dynamic>>(
-                                            data: task,
-                                            feedback: Material(
-                                              child: Container(
-                                                padding: EdgeInsets.all(8),
-                                                color: Colors.grey[300],
-                                                child: Text(task["title"]),
-                                              ),
-                                            ),
-                                            childWhenDragging: Container(),
-                                            child: Card(
-                                              child: ListTile(
-                                                title: Text(task["title"]),
-                                                subtitle: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      "Deadline: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(task['deadline']))}",
-                                                    ),
-                                                    Text("Category: ${task['category'] ?? ''}"),
-                                                    Text("Priority: ${task['priority'] ?? ''}"),
-                                                    SizedBox(height: 5),
-                                                    // Tamamlanma yüzdesi göstergesi
-                                                    LinearProgressIndicator(
-                                                      value: completionPercentage / 100,
-                                                      backgroundColor: Colors.grey[300],
-                                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                                        getCompletionBarColor((completionPercentage / 25).floor() - 1)
-                                                      ),
-                                                      minHeight: 10,
-                                                    ),
-                                                    Padding(
-                                                      padding: const EdgeInsets.only(top: 4),
-                                                      child: Text("Completion: $completionPercentage%"),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
+                                      if (task["description"] != null && task["description"].toString().isNotEmpty)
+                                        Text("Description: ${task["description"]}"),
+                                      if (task["category"] != null && task["category"].toString().isNotEmpty)
+                                        Text("Category: ${task["category"]}"),
+                                      if (task["priority"] != null && task["priority"].toString().isNotEmpty)
+                                        Text("Priority: ${task["priority"]}"),
+                                      const SizedBox(height: 5),
+                                      Row(
+                                        children: List.generate(4, (barIndex) {
+                                          return Expanded(
+                                            child: Container(
+                                              height: 10,
+                                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                                              color: barIndex < (completionPercentage / 25)
+                                                  ? (completionPercentage == 25 ? Colors.grey
+                                                    : completionPercentage == 50 ? Colors.red
+                                                    : completionPercentage == 75 ? Colors.blue
+                                                    : completionPercentage == 100 ? Colors.green
+                                                    : Colors.grey[300])
+                                                  : Colors.grey[300],
                                             ),
                                           );
-                                        },
+                                        }),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      Text("$completionPercentage%"),
+                                    ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () {
+                                      confirmDeleteTask(context, task);
+                                    },
+                                  ),
                                 ),
                               );
                             },
                           ),
-                        );
-                      }).toList(),
-                    ),
                   ),
                 ],
-              ),
-              // 4. Tab: Yönetici Raporlama
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      "Breakdown by Category",
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 16),
-                    Expanded(
-                      child: PieChart(
+              );
+            },
+          ),
+          // 2. Tab: Görev Statüleri - buildStatusTab() kullanarak
+          buildStatusTab(),
+          // 3. Tab: Yönetici Raporlama
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                const Text(
+                  "Breakdown by Category",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: tasks.isEmpty 
+                    ? const Center(
+                        child: Text(
+                          "No tasks available for report",
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      )
+                    : PieChart(
                         PieChartData(
                           sections: getCategoryPieChartSections(),
                           centerSpaceRadius: 40,
                           sectionsSpace: 2,
                         ),
                       ),
-                    ),
-                  ],
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1135,13 +1126,13 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   late TextEditingController titleController;
   late TextEditingController effortController;
   late TextEditingController descriptionController;
-  late TextEditingController categoryController; // Yeni
-  late String selectedStatus; // Yeni
-  late int completionPercentage; // Yeni
+  late TextEditingController categoryController;
+  late String selectedStatus;
+  late int completionPercentage;
   DateTime? selectedDeadline;
   String selectedPriority = "Medium";
 
-  final List<String> statuses = ["Not Started", "In Progress", "Complete"]; // Yeni
+  final List<String> statuses = ["Not Started", "In Progress", "Complete"];
 
   @override
   void initState() {
@@ -1149,11 +1140,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     titleController = TextEditingController(text: widget.task["title"]);
     effortController = TextEditingController(text: widget.task["effort"].toString());
     descriptionController = TextEditingController(text: widget.task["description"]);
-    categoryController = TextEditingController(text: widget.task["category"]); // Yeni
+    categoryController = TextEditingController(text: widget.task["category"]);
     selectedDeadline = DateTime.parse(widget.task["deadline"]);
     selectedPriority = widget.task["priority"] ?? "Medium";
-    selectedStatus = widget.task["status"] ?? "Not Started"; // Yeni
-    completionPercentage = widget.task["completionPercentage"] ?? 0; // Yeni
+    selectedStatus = widget.task["status"] ?? "Not Started";
+    completionPercentage = widget.task["completionPercentage"] ?? 0;
   }
 
   @override
@@ -1161,11 +1152,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     titleController.dispose();
     effortController.dispose();
     descriptionController.dispose();
-    categoryController.dispose(); // Yeni
+    categoryController.dispose();
     super.dispose();
   }
 
-  // Tamamlanma yüzdesini artırma
   void incrementCompletion() {
     setState(() {
       if (completionPercentage < 100) {
@@ -1174,7 +1164,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     });
   }
 
-  // Tamamlanma yüzdesini azaltma
   void decrementCompletion() {
     setState(() {
       if (completionPercentage > 0) {
@@ -1183,7 +1172,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     });
   }
 
-  // İlerleme çubuğu rengi
   Color getCompletionColor() {
     if (completionPercentage == 100) {
       return Colors.green;
@@ -1194,7 +1182,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  // Method to get the color of the completion bar based on the index
   Color getCompletionBarColor(int index) {
     switch (index) {
       case 0:
@@ -1229,10 +1216,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     widget.task["title"] = titleController.text;
     widget.task["effort"] = int.parse(effortController.text);
     widget.task["description"] = descriptionController.text;
-    widget.task["category"] = categoryController.text; // Yeni
+    widget.task["category"] = categoryController.text;
     widget.task["priority"] = selectedPriority;
-    widget.task["status"] = selectedStatus; // Yeni
-    widget.task["completionPercentage"] = completionPercentage; // Yeni
+    widget.task["status"] = selectedStatus;
+    widget.task["completionPercentage"] = completionPercentage;
     if (selectedDeadline != null) {
       widget.task["deadline"] = selectedDeadline!.toIso8601String();
     }

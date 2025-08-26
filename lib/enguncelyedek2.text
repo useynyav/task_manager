@@ -17,7 +17,7 @@ class TaskManagerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Task Masnager',
+      title: 'Task Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
       home: TaskManagerScreen(),
@@ -48,15 +48,14 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   DateTime? selectedDeadline;
   int completionPercentage = 0; // Completion percentage
 
-  final List<String> statuses = ["Atanmadı", "Başlamadı", "Başladı", "Bitti"];
+  final List<String> statuses = ["Not Started", "In Progress", "Complete"];
   final List<String> priorities = ["High", "Medium", "Low"]; // Priority values
   String selectedPriority = "Medium"; // Default priority
 
   Map<String, List<Map<String, dynamic>>> categorizedTasks = {
-    "Atanmadı": [],
-    "Başlamadı": [],
-    "Başladı": [],
-    "Bitti": []
+    "Not Started": [],
+     "In Progress": [],
+    "Complete": []
   };
 
   DateTime? filterDate;
@@ -65,22 +64,22 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   bool isTableView = false; // Varsayılan olarak liste görünümü
 
   List<DataColumn> tableColumns = [
-    DataColumn(label: Text('Görev Adı')),
+    DataColumn(label: Text('Task Name')),
     DataColumn(label: Text('Deadline')),
-    DataColumn(label: Text('Kategori')),
-    DataColumn(label: Text('Öncelik')),
-    DataColumn(label: Text('Statü')), // Yeni sütun
-    DataColumn(label: Text('Efor (saat)')),
-    DataColumn(label: Text('Tamamlanma')),
+    DataColumn(label: Text('Category')),
+    DataColumn(label: Text('Priority')),
+    DataColumn(label: Text('Status')), // Yeni sütun
+    DataColumn(label: Text('Effort (hour)')),
+    DataColumn(label: Text('Completion')),
   ];
 
   String selectedFilterColumn = ''; // Seçilen sütun
   final List<String> filterColumns = [
-    'Görev Adı',
-    'Kategori',
-    'Öncelik',
-    'Statü',
-    'Efor'
+    'Task Name',
+    'Category',
+    'Priority',
+    'Status',
+    'Effort'
   ];
   TextEditingController filterController = TextEditingController();
 
@@ -102,7 +101,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     super.dispose();
   }
 
-  String selectedStatus = "Atanmadı"; // Varsayılan durum
+  String selectedStatus = "Not Started"; // Varsayılan durum
 
   void addTask() {
     if (taskController.text.isEmpty ||
@@ -111,7 +110,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         categoryController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Lütfen tüm alanları doldurun!"),
+          content: Text("Please fill in all fields!"),
           backgroundColor: Colors.red,
         ),
       );
@@ -142,7 +141,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
       descriptionController.clear();
       categoryController.clear();
       selectedDeadline = null;
-      selectedStatus = "Atanmadı";
+      selectedStatus = "Not Started";
       selectedPriority = "Medium"; // Reset priority to default
       completionPercentage = 0; // Reset completion percentage to 0
     });
@@ -194,21 +193,21 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("Görevi Sil"),
-          content: Text("Bu görevi silmek istediğinizden emin misiniz?"),
+          title: Text("Delete task"),
+          content: Text("Are you sure want to delete task?"),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Dialogu kapat
               },
-              child: Text("Hayır"),
+              child: Text("No"),
             ),
             TextButton(
               onPressed: () {
                 deleteTask(task);
                 Navigator.of(context).pop(); // Dialogu kapat
               },
-              child: Text("Evet"),
+              child: Text("Yes"),
             ),
           ],
         );
@@ -220,14 +219,14 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   Future<void> saveTasksToDirectory() async {
     String jsonString = jsonEncode(tasks);
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: "Verilerin kaydedileceği dizini seçin",
+      dialogTitle: "Choose location",
     );
     if (selectedDirectory != null) {
-      String fullPath = '$selectedDirectory/tasks.hus';
+      String fullPath = '$selectedDirectory/tasks.json';
       File file = File(fullPath);
       await file.writeAsString(jsonString);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Veriler $fullPath dosyasına kaydedildi")),
+        SnackBar(content: Text("Data saved in the  $fullPath .")),
       );
     }
   }
@@ -236,7 +235,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   Future<void> loadTasksFromFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['hus'],
+      allowedExtensions: ['json'],
     );
     if (result != null && result.files.single.path != null) {
       File file = File(result.files.single.path!);
@@ -245,10 +244,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
       setState(() {
         tasks = jsonData.map((task) => Map<String, dynamic>.from(task)).toList();
         categorizedTasks = {
-          "Atanmadı": [],
-          "Başlamadı": [],
-          "Başladı": [],
-          "Bitti": [],
+          "Not Started": [],
+          "In Progress": [],
+          "Complete": [],
         };
         for (var task in tasks) {
           String status = task["status"];
@@ -259,7 +257,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
       });
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("Veriler başarıyla yüklendi")));
+      ).showSnackBar(SnackBar(content: Text("Datas was successfully saved.")));
     }
   }
 
@@ -309,9 +307,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
 
     return categoryCounts.entries.map((entry) {
       Color color;
-      if (entry.key == "Atanmadı") {
+      if (entry.key == "Not Started") {
         color = Colors.grey;
-      } else if (entry.key == "Bitti") {
+      } else if (entry.key == "Complete") {
         color = Colors.green;
       } else {
         color = Colors.primaries[categoryCounts.keys.toList().indexOf(entry.key) % Colors.primaries.length].withOpacity(0.5);
@@ -390,7 +388,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
             if (tableColumns[index].label is Text) {
               columnText = (tableColumns[index].label as Text).data ?? '';
             }
-            
+
             return DataColumn(
               label: Row(
                 children: [
@@ -559,15 +557,15 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
       } else {
         filteredTasks = tasks.where((task) {
           switch (column) {
-            case 'Görev Adı':
+            case 'Task Name':
               return task['title'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Kategori':
+            case 'Category':
               return task['category'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Öncelik':
+            case 'Priority':
               return task['priority'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Statü':
+            case 'Status':
               return task['status'].toString().toLowerCase().contains(value.toLowerCase());
-            case 'Efor':
+            case 'Effort':
               return task['effort'].toString().contains(value);
             default:
               return false;
@@ -589,10 +587,10 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 child: DropdownButtonFormField<String>(
                   value: selectedFilterColumn.isEmpty ? null : selectedFilterColumn,
                   decoration: InputDecoration(
-                    labelText: "Filtreleme Sütunu",
+                    labelText: "Filter",
                     border: OutlineInputBorder(),
                   ),
-                  hint: Text('Sütun Seçin'),
+                  hint: Text('Choose column'),
                   items: filterColumns.map((String column) {
                     return DropdownMenuItem<String>(
                       value: column,
@@ -618,7 +616,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                     filteredTasks = tasks;
                   });
                 },
-                tooltip: 'Filtreyi Temizle',
+                tooltip: 'Clear filter',
               ),
             ],
           ),
@@ -627,7 +625,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
             TextField(
               controller: filterController,
               decoration: InputDecoration(
-                labelText: "${selectedFilterColumn} için filtrele",
+                labelText: "Filter for $selectedFilterColumn  ",
                 border: OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(Icons.clear),
@@ -653,22 +651,22 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         actions: [
           IconButton(
             icon: Icon(Icons.save),
-            tooltip: "Verileri Kaydet (Dizin Seçerek)",
+            tooltip: "Save the datas",
             onPressed: saveTasksToDirectory,
           ),
           IconButton(
             icon: Icon(Icons.folder_open),
-            tooltip: "Verileri Yükle",
+            tooltip: "Load the datas",
             onPressed: loadTasksFromFile,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: "Görev Ekle"),
-            Tab(text: "Görev Listesi"),
-            Tab(text: "Görev Statüleri"),
-            Tab(text: "Yönetici Raporlama"), // Yeni Tab
+            Tab(text: "Creating New Task"),
+            Tab(text: "Task List"),
+            Tab(text: "Status"),
+            Tab(text: "Reports"), // Yeni Tab
           ],
         ),
       ),
@@ -693,7 +691,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             TextField(
                               controller: taskController,
                               decoration: InputDecoration(
-                                labelText: "Görev Adı",
+                                labelText: "Task Name",
                                 border: OutlineInputBorder(),
                               ),
                             ),
@@ -701,7 +699,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             DropdownButtonFormField<String>(
                               value: selectedStatus,
                               decoration: InputDecoration(
-                                labelText: "Görev Statüsü",
+                                labelText: "Status ",
                                 border: OutlineInputBorder(),
                               ),
                               items: statuses.map((String status) {
@@ -720,7 +718,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             DropdownButtonFormField<String>(
                               value: selectedPriority, // Varsayılan değer: "Medium"
                               decoration: InputDecoration(
-                                labelText: "Öncelik",
+                                labelText: "Priority",
                                 border: OutlineInputBorder(),
                               ),
                               items: priorities.map((String priority) {
@@ -740,7 +738,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                               controller: effortController,
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
-                                labelText: "Toplam efor (saat)",
+                                labelText: "Total Effort (hour)",
                                 border: OutlineInputBorder(),
                               ),
                               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -749,7 +747,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             TextField(
                               controller: descriptionController,
                               decoration: InputDecoration(
-                                labelText: "Açıklama",
+                                labelText: "Description",
                                 border: OutlineInputBorder(),
                               ),
                               maxLines: 3,
@@ -758,7 +756,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             TextField(
                               controller: categoryController,
                               decoration: InputDecoration(
-                                labelText: "Kategori",
+                                labelText: "Category",
                                 border: OutlineInputBorder(),
                               ),
                             ),
@@ -774,9 +772,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      selectedDeadline != null 
+                                      selectedDeadline != null
                                           ? DateFormat('dd/MM/yyyy').format(selectedDeadline!)
-                                          : "Tarih seçiniz",
+                                          : "Choose date",
                                     ),
                                     Icon(Icons.calendar_today),
                                   ],
@@ -789,7 +787,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                               children: [
                                 InputDecorator(
                                   decoration: InputDecoration(
-                                    labelText: "Tamamlanma Yüzdesi",
+                                    labelText: "Percentage of Completion",
                                     border: OutlineInputBorder(),
                                   ),
                                   child: Column(
@@ -826,7 +824,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                             SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: addTask,
-                              child: Text("Ekle"),
+                              child: Text("Add"),
                             ),
                           ],
                         ),
@@ -851,7 +849,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                           mainAxisAlignment: MainAxisAlignment.start, // changed from spaceBetween
                           children: [
                             Text(
-                              "Görev Listesi",
+                              "List",
                               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -868,7 +866,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                               });
                             },
                             icon: Icon(Icons.list),
-                            label: Text("Liste Görünümü"),
+                            label: Text("List View"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: !isTableView ? Colors.blue : Colors.grey,
                             ),
@@ -881,7 +879,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                               });
                             },
                             icon: Icon(Icons.grid_on),
-                            label: Text("Tablo Görünümü"),
+                            label: Text("Table View"),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: isTableView ? Colors.blue : Colors.grey,
                             ),
@@ -927,14 +925,14 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)}\nEfor: ${task['effort']} saat",
+                                            "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)}\nEffort: ${task['effort']} hour",
                                           ),
                                           if (task["description"] != null && task["description"].toString().isNotEmpty)
-                                            Text("Açıklama: ${task["description"]}"),
+                                            Text("Description: ${task["description"]}"),
                                           if (task["category"] != null && task["category"].toString().isNotEmpty)
-                                            Text("Kategori: ${task["category"]}"),
+                                            Text("Category: ${task["category"]}"),
                                           if (task["priority"] != null && task["priority"].toString().isNotEmpty)
-                                            Text("Öncelik: ${task["priority"]}"),
+                                            Text("priority: ${task["priority"]}"),
                                           SizedBox(height: 5),
                                           Row(
                                             children: [
@@ -946,11 +944,11 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                                       child: Container(
                                                         height: 10,
                                                         margin: EdgeInsets.symmetric(horizontal: 2),
-                                                        color: barIndex < (completionPercentage / 25) 
-                                                            ? (completionPercentage == 25 ? Colors.grey 
-                                                              : completionPercentage == 50 ? Colors.red 
-                                                              : completionPercentage == 75 ? Colors.blue 
-                                                              : completionPercentage == 100 ? Colors.green 
+                                                        color: barIndex < (completionPercentage / 25)
+                                                            ? (completionPercentage == 25 ? Colors.grey
+                                                              : completionPercentage == 50 ? Colors.red
+                                                              : completionPercentage == 75 ? Colors.blue
+                                                              : completionPercentage == 100 ? Colors.green
                                                               : Colors.grey[300])
                                                             : Colors.grey[300],
                                                       ),
@@ -991,7 +989,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                   Padding(
                     padding: EdgeInsets.all(8.0),
                     child: Text(
-                      "Görev Statüleri",
+                      "Status",
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1000,9 +998,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: statuses.map((status) {
                         Color backgroundColor;
-                        if (status == "Atanmadı") {
+                        if (status == "Not Started") {
                           backgroundColor = Colors.grey;
-                        } else if (status == "Bitti") {
+                        } else if (status == "Complete") {
                           backgroundColor = Colors.green;
                         } else {
                           backgroundColor = Colors.blueAccent;
@@ -1059,8 +1057,8 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                                     Text(
                                                       "Deadline: ${DateFormat('dd/MM/yyyy').format(DateTime.parse(task['deadline']))}",
                                                     ),
-                                                    Text("Kategori: ${task['category'] ?? ''}"),
-                                                    Text("Öncelik: ${task['priority'] ?? ''}"),
+                                                    Text("Category: ${task['category'] ?? ''}"),
+                                                    Text("Priority: ${task['priority'] ?? ''}"),
                                                     SizedBox(height: 5),
                                                     // Tamamlanma yüzdesi göstergesi
                                                     LinearProgressIndicator(
@@ -1073,7 +1071,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                                     ),
                                                     Padding(
                                                       padding: const EdgeInsets.only(top: 4),
-                                                      child: Text("Tamamlanma: $completionPercentage%"),
+                                                      child: Text("Completion: $completionPercentage%"),
                                                     ),
                                                   ],
                                                 ),
@@ -1100,7 +1098,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 child: Column(
                   children: [
                     Text(
-                      "Görevlerin Kategori Dağılımı",
+                      "Breakdown by Category",
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 16),
@@ -1143,7 +1141,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   DateTime? selectedDeadline;
   String selectedPriority = "Medium";
 
-  final List<String> statuses = ["Atanmadı", "Başlamadı", "Başladı", "Bitti"]; // Yeni
+  final List<String> statuses = ["Not Started", "In Progress", "Complete"]; // Yeni
 
   @override
   void initState() {
@@ -1154,7 +1152,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     categoryController = TextEditingController(text: widget.task["category"]); // Yeni
     selectedDeadline = DateTime.parse(widget.task["deadline"]);
     selectedPriority = widget.task["priority"] ?? "Medium";
-    selectedStatus = widget.task["status"] ?? "Atanmadı"; // Yeni
+    selectedStatus = widget.task["status"] ?? "Not Started"; // Yeni
     completionPercentage = widget.task["completionPercentage"] ?? 0; // Yeni
   }
 
@@ -1249,7 +1247,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Görev Detayları")),
+      appBar: AppBar(title: Text("Details")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
@@ -1257,43 +1255,43 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Başlık",
+                "Title",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               TextFormField(
                 controller: titleController,
-                decoration: InputDecoration(hintText: "Görev başlığı"),
+                decoration: InputDecoration(hintText: "Task Title"),
               ),
               SizedBox(height: 16),
               Text(
-                "Efor (saat)",
+                "Effort (hour)",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               TextFormField(
                 controller: effortController,
-                decoration: InputDecoration(hintText: "Efor"),
+                decoration: InputDecoration(hintText: "Effort"),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               SizedBox(height: 16),
               Text(
-                "Açıklama",
+                "Description",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               TextFormField(
                 controller: descriptionController,
-                decoration: InputDecoration(hintText: "Açıklama"),
+                decoration: InputDecoration(hintText: "Description"),
                 maxLines: 3,
               ),
               SizedBox(height: 16),
               Text(
-                "Öncelik",
+                "Priority",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               DropdownButtonFormField<String>(
                 value: selectedPriority,
                 decoration: InputDecoration(
-                  labelText: "Öncelik",
+                  labelText: "Priority",
                   border: OutlineInputBorder(),
                 ),
                 items: ["High", "Medium", "Low"].map((String priority) {
@@ -1316,27 +1314,27 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               Row(
                 children: [
                   Text(
-                    selectedDeadline != null ? DateFormat('dd/MM/yyyy').format(selectedDeadline!) : "Tarih seçilmedi",
+                    selectedDeadline != null ? DateFormat('dd/MM/yyyy').format(selectedDeadline!) : "Date not selected",
                   ),
                   SizedBox(width: 16),
                   ElevatedButton(
                     onPressed: pickDeadline,
-                    child: Text("Tarih Seç"),
+                    child: Text("Select date"),
                   ),
                 ],
               ),
               SizedBox(height: 24),
-              Text("Kategori", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("Category", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               TextFormField(
                 controller: categoryController,
                 decoration: InputDecoration(
-                  hintText: "Kategori",
+                  hintText: "Category",
                   border: OutlineInputBorder(),
                 ),
               ),
               SizedBox(height: 16),
 
-              Text("Durum", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("Status", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               DropdownButtonFormField<String>(
                 value: selectedStatus,
                 decoration: InputDecoration(
@@ -1356,7 +1354,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               ),
               SizedBox(height: 16),
 
-              Text("Tamamlanma Yüzdesi", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text("Percentage of Completion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               InputDecorator(
                 decoration: InputDecoration(
                   border: OutlineInputBorder(),
@@ -1400,10 +1398,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                   ElevatedButton(
                     onPressed: cancelChanges,
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    child: Text("İptal"),
+                    child: Text("Cancel"),
                   ),
                   SizedBox(width: 16),
-                  ElevatedButton(onPressed: saveChanges, child: Text("Kaydet")),
+                  ElevatedButton(onPressed: saveChanges, child: Text("Save")),
                 ],
               ),
             ],

@@ -625,7 +625,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
             TextField(
               controller: filterController,
               decoration: InputDecoration(
-                labelText: "Filter for ${selectedFilterColumn}  ",
+                labelText: "Filter for $selectedFilterColumn  ",
                 border: OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(Icons.clear),
