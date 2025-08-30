@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-// Görev detaylarını düzenleyebileceğiniz ekran (Detay sayfası)
+
 class TaskDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> task;
-  const TaskDetailScreen({super.key, required this.task});
+  final Map<String, dynamic>? task;
+  const TaskDetailScreen({super.key, this.task});
 
   @override
   _TaskDetailScreenState createState() => _TaskDetailScreenState();
@@ -21,18 +21,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   String selectedPriority = "Medium";
 
   final List<String> statuses = ["Not Started", "In Progress", "Complete"];
+  final List<String> priorities = ["High", "Medium", "Low"];
+
+  bool get isEditMode => widget.task != null;
 
   @override
   void initState() {
     super.initState();
-    titleController = TextEditingController(text: widget.task["title"]);
-    effortController = TextEditingController(text: widget.task["effort"].toString());
-    descriptionController = TextEditingController(text: widget.task["description"]);
-    categoryController = TextEditingController(text: widget.task["category"]);
-    selectedDeadline = DateTime.parse(widget.task["deadline"]);
-    selectedPriority = widget.task["priority"] ?? "Medium";
-    selectedStatus = widget.task["status"] ?? "Not Started";
-    completionPercentage = widget.task["completionPercentage"] ?? 0;
+    if (isEditMode) {
+      // Edit mode - mevcut task verilerini doldur
+      titleController = TextEditingController(text: widget.task!["title"]);
+      effortController = TextEditingController(text: widget.task!["effort"].toString());
+      descriptionController = TextEditingController(text: widget.task!["description"]);
+      categoryController = TextEditingController(text: widget.task!["category"]);
+      selectedDeadline = DateTime.parse(widget.task!["deadline"]);
+      selectedPriority = widget.task!["priority"] ?? "Medium";
+      selectedStatus = widget.task!["status"] ?? "Not Started";
+      completionPercentage = widget.task!["completionPercentage"] ?? 0;
+    } else {
+      // Create mode - boş değerler
+      titleController = TextEditingController();
+      effortController = TextEditingController();
+      descriptionController = TextEditingController();
+      categoryController = TextEditingController();
+      selectedStatus = "Not Started";
+      completionPercentage = 0;
+    }
   }
 
   @override
@@ -61,32 +75,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Color getCompletionColor() {
-    if (completionPercentage == 100) {
-      return Colors.green;
-    } else if (completionPercentage >= 75) {
-      return Colors.blue;
-    } else if (completionPercentage >= 50) {
-      return Colors.orange;
-    } else if (completionPercentage >= 25) {
-      return Colors.red;
-    } else {
-      return Colors.grey;
-    }
-  }
-
-  Color getCompletionBarColor(int index) {
-    switch (index) {
-      case 0:
-        return Colors.grey;
-      case 1:
-        return Colors.red;
-      case 2:
-        return Colors.blue;
-      case 3:
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
+    if (completionPercentage >= 100) return Colors.green;
+    if (completionPercentage >= 75) return Colors.blue;
+    if (completionPercentage >= 50) return Colors.orange;
+    if (completionPercentage >= 25) return Colors.red;
+    return Colors.grey;
   }
 
   Future<void> pickDeadline() async {
@@ -103,190 +96,511 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  // Güncellenmiş task nesnesini döndürüyoruz.
   void saveChanges() {
-    widget.task["title"] = titleController.text;
-    widget.task["effort"] = int.parse(effortController.text);
-    widget.task["description"] = descriptionController.text;
-    widget.task["category"] = categoryController.text;
-    widget.task["priority"] = selectedPriority;
-    widget.task["status"] = selectedStatus;
-    widget.task["completionPercentage"] = completionPercentage;
-    if (selectedDeadline != null) {
-      widget.task["deadline"] = selectedDeadline!.toIso8601String();
+    if (titleController.text.isEmpty || 
+        selectedDeadline == null || 
+        effortController.text.isEmpty || 
+        categoryController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill in all required fields!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
-    Navigator.pop(context, widget.task);
+
+    Map<String, dynamic> taskData = {
+      "title": titleController.text,
+      "effort": int.tryParse(effortController.text) ?? 0,
+      "description": descriptionController.text,
+      "category": categoryController.text,
+      "priority": selectedPriority,
+      "status": selectedStatus,
+      "completionPercentage": completionPercentage,
+      "deadline": selectedDeadline!.toIso8601String(),
+    };
+
+    Navigator.pop(context, {
+      'action': 'update',
+      'task': taskData,
+    });
   }
 
-  // İptal: Hiçbir değişiklik yapmadan geri dönüyoruz.
+  void saveAsNew() {
+    if (titleController.text.isEmpty || 
+        selectedDeadline == null || 
+        effortController.text.isEmpty || 
+        categoryController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please fill in all required fields!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Title değiştirme dialog'u
+    showDialog(
+      context: context,
+      builder: (context) {
+        TextEditingController newTitleController = TextEditingController(text: titleController.text + " (Copy)");
+        return AlertDialog(
+          title: const Text("Save as New Task"),
+          content: TextField(
+            controller: newTitleController,
+            decoration: const InputDecoration(
+              labelText: "New Task Title",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                
+                Map<String, dynamic> taskData = {
+                  "title": newTitleController.text,
+                  "effort": int.tryParse(effortController.text) ?? 0,
+                  "description": descriptionController.text,
+                  "category": categoryController.text,
+                  "priority": selectedPriority,
+                  "status": selectedStatus,
+                  "completionPercentage": completionPercentage,
+                  "deadline": selectedDeadline!.toIso8601String(),
+                };
+
+                Navigator.pop(context, {
+                  'action': 'create',
+                  'task': taskData,
+                });
+              },
+              child: const Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void cancelChanges() {
-    Navigator.pop(context, null);
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Details")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: Text(isEditMode ? "Edit Task" : "New Task"),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Title",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              TextFormField(
-                controller: titleController,
-                decoration: InputDecoration(hintText: "Task Title"),
-              ),
-              SizedBox(height: 16),
-              Text(
-                "Effort (hour)",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              TextFormField(
-                controller: effortController,
-                decoration: InputDecoration(hintText: "Effort"),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              SizedBox(height: 16),
-              Text(
-                "Description",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              TextFormField(
-                controller: descriptionController,
-                decoration: InputDecoration(hintText: "Description"),
-                maxLines: 3,
-              ),
-              SizedBox(height: 16),
-              Text(
-                "Priority",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              DropdownButtonFormField<String>(
-                value: selectedPriority,
-                decoration: InputDecoration(
-                  labelText: "Priority",
-                  border: OutlineInputBorder(),
-                ),
-                items: ["High", "Medium", "Low"].map((String priority) {
-                  return DropdownMenuItem<String>(
-                    value: priority,
-                    child: Text(priority),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    selectedPriority = newValue!;
-                  });
-                },
-              ),
-              SizedBox(height: 16),
-              Text(
-                "Deadline",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              Row(
-                children: [
-                  Text(
-                    selectedDeadline != null ? DateFormat('dd/MM/yyyy').format(selectedDeadline!) : "Date not selected",
-                  ),
-                  SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: pickDeadline,
-                    child: Text("Select date"),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-              Text("Category", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              TextFormField(
-                controller: categoryController,
-                decoration: InputDecoration(
-                  hintText: "Category",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              SizedBox(height: 16),
+              // Header Card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title Field
+                      _buildSectionHeader("Task Title", Icons.edit, Colors.blue),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          hintText: "Enter task title",
+                          prefixIcon: const Icon(Icons.task_alt),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-              Text("Status", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              DropdownButtonFormField<String>(
-                value: selectedStatus,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(),
+                      // Description Field
+                      _buildSectionHeader("Description", Icons.description, Colors.green),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: InputDecoration(
+                          hintText: "Enter task description",
+                          prefixIcon: const Icon(Icons.notes),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
                 ),
-                items: statuses.map((String status) {
-                  return DropdownMenuItem<String>(
-                    value: status,
-                    child: Text(status),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    selectedStatus = newValue!;
-                  });
-                },
               ),
-              SizedBox(height: 16),
 
-              Text("Percentage of Completion", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              InputDecorator(
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("$completionPercentage%"),
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: decrementCompletion,
-                              icon: Icon(Icons.remove),
+              const SizedBox(height: 16),
+
+              // Details Card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      // Row 1: Category + Effort
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader("Category", Icons.category, Colors.purple),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: categoryController,
+                                  decoration: InputDecoration(
+                                    hintText: "Category",
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                  ),
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              onPressed: incrementCompletion,
-                              icon: Icon(Icons.add),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader("Effort (hours)", Icons.timer, Colors.orange),
+                                const SizedBox(height: 8),
+                                TextFormField(
+                                  controller: effortController,
+                                  decoration: InputDecoration(
+                                    hintText: "Hours",
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Row 2: Priority + Status
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader("Priority", Icons.flag, Colors.red),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  value: selectedPriority,
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                  ),
+                                  items: priorities.map((String priority) {
+                                    return DropdownMenuItem<String>(
+                                      value: priority,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.circle,
+                                            size: 12,
+                                            color: priority == "High" ? Colors.red :
+                                                   priority == "Medium" ? Colors.orange : Colors.green,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(priority),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      selectedPriority = newValue!;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader("Status", Icons.track_changes, Colors.teal),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  value: selectedStatus,
+                                  decoration: InputDecoration(
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.grey.shade50,
+                                  ),
+                                  items: statuses.map((String status) {
+                                    return DropdownMenuItem<String>(
+                                      value: status,
+                                      child: Text(status),
+                                    );
+                                  }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      selectedStatus = newValue!;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Deadline & Progress Card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    children: [
+                      // Deadline Section
+                      _buildSectionHeader("Deadline", Icons.calendar_today, Colors.indigo),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: pickDeadline,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey.shade50,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.event, color: Colors.indigo),
+                              const SizedBox(width: 12),
+                              Text(
+                                selectedDeadline != null 
+                                  ? DateFormat('EEEE, dd MMMM yyyy').format(selectedDeadline!)
+                                  : "Select deadline date",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: selectedDeadline != null ? Colors.black87 : Colors.grey.shade600,
+                                ),
+                              ),
+                              const Spacer(),
+                              Icon(Icons.arrow_drop_down, color: Colors.grey.shade600),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Progress Section
+                      _buildSectionHeader("Completion Progress", Icons.pie_chart, Colors.deepPurple),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                          color: Colors.grey.shade50,
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "$completionPercentage%",
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      onPressed: decrementCompletion,
+                                      icon: const Icon(Icons.remove_circle),
+                                      color: Colors.red.shade400,
+                                    ),
+                                    IconButton(
+                                      onPressed: incrementCompletion,
+                                      icon: const Icon(Icons.add_circle),
+                                      color: Colors.green.shade400,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: completionPercentage / 100,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: AlwaysStoppedAnimation<Color>(getCompletionColor()),
+                              minHeight: 8,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "0%",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                Text(
+                                  "100%",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                    LinearProgressIndicator(
-                      value: completionPercentage / 100,
-                      backgroundColor: Colors.grey[300],
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        getCompletionBarColor((completionPercentage / 25).floor() - 1)
                       ),
-                      minHeight: 10,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-              SizedBox(height: 24),
 
+              const SizedBox(height: 24),
+
+              // Action Buttons
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  ElevatedButton(
-                    onPressed: cancelChanges,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    child: Text("Cancel"),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: cancelChanges,
+                      icon: const Icon(Icons.close),
+                      label: const Text("Cancel"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade400,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
                   ),
-                  SizedBox(width: 16),
-                  ElevatedButton(onPressed: saveChanges, child: Text("Save")),
+                  const SizedBox(width: 12),
+                  if (isEditMode) ...[
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: saveAsNew,
+                        icon: const Icon(Icons.copy),
+                        label: const Text("Save As"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade400,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: saveChanges,
+                      icon: const Icon(Icons.save),
+                      label: Text(isEditMode ? "Save" : "Create"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade400,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -8,9 +8,10 @@ import 'package:flutter_application_1/screens/task_detail_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  runApp(const TaskManagerApp()); // const eklendi
+  runApp(const TaskManagerApp());
 }
 
 class TaskManagerApp extends StatelessWidget {
@@ -22,7 +23,7 @@ class TaskManagerApp extends StatelessWidget {
       title: 'Task Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: const TaskManagerScreen(), // const eklendi
+      home: const TaskManagerScreen(),
     );
   }
 }
@@ -52,6 +53,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   final List<String> statuses = ["Not Started", "In Progress", "Complete"];
   final List<String> priorities = ["High", "Medium", "Low"];
   String selectedPriority = "Medium";
+  String selectedStatus = "Not Started"; // Eksik olan değişken
 
   Map<String, List<Map<String, dynamic>>> categorizedTasks = {
     "Not Started": [],
@@ -124,12 +126,18 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     'actions': 1.0,      // En dar kolon
   };
 
+  // Eksik olan değişkenler
+  String? lastLoadedFilePath;
+  bool isLoadingLastFile = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    sortTasksByDeadline();
-    filteredTasks = tasks;
+    _loadSampleData(); // Sample data yükle
+    categorizeTasksByStatus(); // Kategorize et
+    sortTasksByDeadline(ascending: isAscending); // Sort et
+    _loadLastFileOnStartup(); // Son dosyayı yükle
   }
 
   @override
@@ -138,15 +146,374 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     taskController.dispose();
     effortController.dispose();
     descriptionController.dispose();
+    categoryController.dispose();
     filterController.dispose();
     super.dispose();
   }
 
-  String selectedStatus = "Not Started";
+  // Sample data yükleme
+  void _loadSampleData() {
+    setState(() {
+      tasks = [
+        {
+          "title": "Complete Flutter UI",
+          "deadline": "2024-01-15",
+          "category": "Development",
+          "priority": "High",
+          "status": "In Progress",
+          "effort": 8,
+          "completionPercentage": 75,
+          "description": "Complete the user interface design"
+        },
+        {
+          "title": "Review Code",
+          "deadline": "2024-01-10",
+          "category": "Quality Assurance",
+          "priority": "Medium",
+          "status": "Not Started",
+          "effort": 3,
+          "completionPercentage": 0,
+          "description": "Review the codebase for bugs"
+        },
+        {
+          "title": "Write Documentation",
+          "deadline": "2024-01-20",
+          "category": "Documentation",
+          "priority": "Low",
+          "status": "Complete",
+          "effort": 5,
+          "completionPercentage": 100,
+          "description": "Write comprehensive documentation"
+        },
+      ];
+      filteredTasks = List.from(tasks);
+    });
+  }
 
-  // Pop-up'ta görev ekleme işlemi - düzeltilmiş hali
+  // Kategorize tasks metodu
+  void categorizeTasksByStatus() {
+    setState(() {
+      categorizedTasks = {
+        "Not Started": [],
+        "In Progress": [],
+        "Complete": [],
+      };
+      for (var task in tasks) {
+        String status = task["status"];
+        categorizedTasks[status]?.add(task);
+      }
+    });
+  }
+
+  // Uygulama başladığında son dosyayı yükleme
+  Future<void> _loadLastFileOnStartup() async {
+    setState(() {
+      isLoadingLastFile = true;
+    });
+
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? savedFilePath = prefs.getString('last_loaded_file');
+      
+      if (savedFilePath != null && savedFilePath.isNotEmpty) {
+        File file = File(savedFilePath);
+        
+        // Dosya hala var mı kontrol et
+        if (await file.exists()) {
+          await loadSpecificTaskFile(file, saveToPrefs: false); // Tekrar kaydetme
+          lastLoadedFilePath = savedFilePath;
+          
+          // Başarılı yükleme mesajı göster
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.history, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Auto-loaded: ${file.path.split('\\').last}\n${tasks.length} task(s) loaded",
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.blue,
+                duration: const Duration(seconds: 3),
+                action: SnackBarAction(
+                  label: 'Close',
+                  textColor: Colors.white,
+                  onPressed: () {},
+                ),
+              ),
+            );
+          }
+        } else {
+          // Dosya artık yok, preferences'i temizle
+          await prefs.remove('last_loaded_file');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text("Previously loaded file no longer exists"),
+                backgroundColor: Colors.orange,
+                action: SnackBarAction(
+                  label: 'Load New',
+                  onPressed: () => showLoadTasksDialog(),
+                ),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading last file: $e');
+    } finally {
+      setState(() {
+        isLoadingLastFile = false;
+      });
+    }
+  }
+
+  // Dosya yolunu preferences'e kaydetme
+  Future<void> _saveLastLoadedFile(String filePath) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_loaded_file', filePath);
+      lastLoadedFilePath = filePath;
+    } catch (e) {
+      print('Error saving last loaded file: $e');
+    }
+  }
+
+  // Son dosya bilgisini temizleme
+  Future<void> _clearLastLoadedFile() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_loaded_file');
+      lastLoadedFilePath = null;
+    } catch (e) {
+      print('Error clearing last loaded file: $e');
+    }
+  }
+
+  // Belirli bir JSON dosyasını yükleyen metod - güncellenmiş
+  Future<void> loadSpecificTaskFile(File file, {bool saveToPrefs = true}) async {
+    try {
+      String contents = await file.readAsString();
+      dynamic jsonData = jsonDecode(contents);
+      
+      setState(() {
+        // Eski format kontrolü (sadece task array)
+        if (jsonData is List) {
+          // Eski format - sadece task'ları yükle
+          tasks = jsonData.map((task) => Map<String, dynamic>.from(task)).toList();
+          _resetColumnSettingsToDefault();
+        } else if (jsonData is Map<String, dynamic>) {
+          // Yeni format - hem task'ları hem column settings'i yükle
+          if (jsonData.containsKey('tasks')) {
+            tasks = (jsonData['tasks'] as List)
+                .map((task) => Map<String, dynamic>.from(task))
+                .toList();
+          } else {
+            // Map ama 'tasks' anahtarı yok - belki eski farklı format
+            tasks = [];
+          }
+          
+          // Column settings'i yükle (varsa)
+          if (jsonData.containsKey('columnSettings')) {
+            _loadColumnSettings(jsonData['columnSettings']);
+          } else {
+            _resetColumnSettingsToDefault();
+          }
+        }
+        
+        // Kategorize tasks
+        categorizedTasks = {
+          "Not Started": [],
+          "In Progress": [],
+          "Complete": [],
+        };
+        for (var task in tasks) {
+          String status = task["status"];
+          categorizedTasks[status]?.add(task);
+        }
+        
+        sortTasksByDeadline(ascending: isAscending);
+        filteredTasks = List.from(tasks);
+      });
+      
+      // Dosya yolunu kaydet (eğer saveToPrefs true ise)
+      if (saveToPrefs) {
+        await _saveLastLoadedFile(file.path);
+      }
+      
+      String fileName = file.path.split('\\').last;
+      if (mounted && saveToPrefs) { // Auto-load sırasında mesaj gösterme
+        bool hasColumnSettings = jsonData is Map<String, dynamic> && 
+                                jsonData.containsKey('columnSettings');
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Successfully loaded: $fileName\n${tasks.length} task(s) imported"
+                    "${hasColumnSettings ? ' + column settings restored' : ''}"
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error loading file: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Son dosyayı yeniden yükleme metodu
+  Future<void> _reloadLastFile() async {
+    if (lastLoadedFilePath != null) {
+      File file = File(lastLoadedFilePath!);
+      if (await file.exists()) {
+        await loadSpecificTaskFile(file, saveToPrefs: false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.refresh, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text("Reloaded: ${file.path.split('\\').last}"),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.blue,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        await _clearLastLoadedFile();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Last loaded file no longer exists"),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No previously loaded file found"),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      }
+    }
+  }
+
+  // Görev ekleme metodunu güncelle - ekleme sonrası son dosyayı güncelle
+  void addTaskFromDialog() {
+    setState(() {
+      Map<String, dynamic> newTask = {
+        "title": taskController.text,
+        "deadline": selectedDeadline!.toIso8601String(),
+        "effort": int.tryParse(effortController.text) ?? 0,
+        "description": descriptionController.text,
+        "status": selectedStatus,
+        "category": categoryController.text,
+        "priority": selectedPriority,
+        "completionPercentage": completionPercentage,
+      };
+
+      tasks.add(newTask);
+      categorizedTasks[selectedStatus]!.add(newTask);
+      sortTasksByDeadline(ascending: isAscending);
+      filteredTasks = List.from(tasks);
+    });
+    
+    // Eğer son yüklenen dosya varsa, değişiklik yapıldığını göster
+    _markFileAsModified();
+  }
+
+  // Dosya değiştirildi işareti
+  void _markFileAsModified() {
+    // Bu metod, dosyanın değiştirildiğini belirtmek için kullanılabilir
+    // İleride auto-save özelliği eklenirse buraya yazılabilir
+  }
+
+  // Sort tasks by deadline
+  void sortTasksByDeadline({bool ascending = true}) {
+    tasks.sort((a, b) {
+      DateTime dateA = DateTime.parse(a['deadline']);
+      DateTime dateB = DateTime.parse(b['deadline']);
+      return ascending ? dateA.compareTo(dateB) : dateB.compareTo(dateA);
+    });
+  }
+
+  // Move task between statuses
+  void moveTask(String fromStatus, String toStatus, Map<String, dynamic> task) {
+    setState(() {
+      categorizedTasks[fromStatus]!.remove(task);
+      categorizedTasks[toStatus]!.add(task);
+      task["status"] = toStatus;
+    });
+  }
+
+  // Delete task
+  void deleteTask(Map<String, dynamic> task) {
+    setState(() {
+      tasks.remove(task);
+      categorizedTasks[task["status"]]!.remove(task);
+      filteredTasks = List.from(tasks);
+    });
+  }
+
+  // Confirm delete task
+  void confirmDeleteTask(BuildContext context, Map<String, dynamic> task) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Delete task"),
+          content: Text("Are you sure want to delete task?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text("No"),
+            ),
+            TextButton(
+              onPressed: () {
+                deleteTask(task);
+                Navigator.of(context).pop();
+              },
+              child: Text("Yes"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Show add task dialog
   void showAddTaskDialog() {
-    // Dialog açılmadan önce değerleri sıfırla
     taskController.clear();
     effortController.clear();
     descriptionController.clear();
@@ -159,7 +526,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        String errorMessage = ""; // Hata mesajı için değişken
+        String errorMessage = "";
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -171,7 +538,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Hata mesajını göster
                       if (errorMessage.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.all(8.0),
@@ -357,7 +723,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    // Validasyon kontrolü
                     if (taskController.text.isEmpty ||
                         selectedDeadline == null ||
                         effortController.text.isEmpty ||
@@ -366,10 +731,9 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                       setDialogState(() {
                         errorMessage = "Please fill in all fields!";
                       });
-                      return; // Dialog'u kapatmadan çık
+                      return;
                     }
 
-                    // Validasyon başarılı ise görevi ekle ve dialog'u kapat
                     addTaskFromDialog();
                     Navigator.of(context).pop();
                   },
@@ -383,128 +747,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     );
   }
 
-  // Dialog'dan görev ekleme işlemi için ayrı metod
-  void addTaskFromDialog() {
-    setState(() {
-      Map<String, dynamic> newTask = {
-        "title": taskController.text,
-        "deadline": selectedDeadline!.toIso8601String(),
-        "effort": int.tryParse(effortController.text) ?? 0,
-        "description": descriptionController.text,
-        "status": selectedStatus,
-        "category": categoryController.text,
-        "priority": selectedPriority,
-        "completionPercentage": completionPercentage,
-      };
-
-      tasks.add(newTask);
-      categorizedTasks[selectedStatus]!.add(newTask);
-      sortTasksByDeadline(ascending: isAscending);
-      filteredTasks = tasks;
-    });
-  }
-
-  // Eski addTask metodunu güncelleyelim (artık sadece ScaffoldMessenger kullanacak)
-  void addTask() {
-    if (taskController.text.isEmpty ||
-        selectedDeadline == null ||
-        effortController.text.isEmpty ||
-        categoryController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Please fill in all fields!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      Map<String, dynamic> newTask = {
-        "title": taskController.text,
-        "deadline": selectedDeadline!.toIso8601String(),
-        "effort": int.tryParse(effortController.text) ?? 0,
-        "description": descriptionController.text,
-        "status": selectedStatus,
-        "category": categoryController.text,
-        "priority": selectedPriority,
-        "completionPercentage": completionPercentage,
-      };
-
-      tasks.add(newTask);
-      categorizedTasks[selectedStatus]!.add(newTask);
-      sortTasksByDeadline(ascending: isAscending);
-      filteredTasks = tasks;
-    });
-  }
-
-  // Görevleri deadline'a göre sıralama
-  void sortTasksByDeadline({bool ascending = true}) {
-    tasks.sort((a, b) {
-      DateTime dateA = DateTime.parse(a['deadline']);
-      DateTime dateB = DateTime.parse(b['deadline']);
-      return ascending ? dateA.compareTo(dateB) : dateB.compareTo(dateA);
-    });
-  }
-
-  // Görevi sürükleyerek statü değiştirme
-  void moveTask(String fromStatus, String toStatus, Map<String, dynamic> task) {
-    setState(() {
-      categorizedTasks[fromStatus]!.remove(task);
-      categorizedTasks[toStatus]!.add(task);
-      task["status"] = toStatus;
-    });
-  }
-
-  // Tarih seçme işlemi
-  Future<void> pickDeadline() async {
-    DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
-    );
-    if (pickedDate != null) {
-      setState(() {
-        selectedDeadline = pickedDate;
-      });
-    }
-  }
-
-  // Görevi tamamen silme
-  void deleteTask(Map<String, dynamic> task) {
-    setState(() {
-      tasks.remove(task);
-      categorizedTasks[task["status"]]!.remove(task);
-    });
-  }
-
-  void confirmDeleteTask(BuildContext context, Map<String, dynamic> task) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Delete task"),
-          content: Text("Are you sure want to delete task?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text("No"),
-            ),
-            TextButton(
-              onPressed: () {
-                deleteTask(task);
-                Navigator.of(context).pop();
-              },
-              child: Text("Yes"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // JSON dosyalarını listeleyen ve seçim yapabileceğiniz dialog
+  // Show load tasks dialog
   Future<void> showLoadTasksDialog() async {
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
       dialogTitle: "Choose folder containing JSON files",
@@ -515,7 +758,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         Directory directory = Directory(selectedDirectory);
         List<FileSystemEntity> files = directory.listSync();
         
-        // JSON dosyalarını filtrele
         List<File> jsonFiles = files
             .where((file) => file is File && file.path.endsWith('.json'))
             .cast<File>()
@@ -531,7 +773,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
           return;
         }
         
-        // JSON dosyalarını dialog ile göster
         showDialog(
           context: context,
           builder: (BuildContext context) {
@@ -563,7 +804,6 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                           String fileName = file.path.split('\\').last;
                           String filePath = file.path;
                           
-                          // Dosya bilgilerini al
                           FileStat fileStat = file.statSync();
                           String fileSize = "${(fileStat.size / 1024).toStringAsFixed(1)} KB";
                           String lastModified = DateFormat('dd/MM/yyyy HH:mm').format(fileStat.modified);
@@ -595,8 +835,8 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                               ),
                               trailing: Icon(Icons.arrow_forward_ios, size: 16),
                               onTap: () async {
-                                Navigator.of(context).pop(); // Dialog'u kapat
-                                await loadSpecificTaskFile(file); // Dosyayı yükle
+                                Navigator.of(context).pop();
+                                await loadSpecificTaskFile(file);
                               },
                               hoverColor: Colors.blue.withOpacity(0.1),
                             ),
@@ -615,7 +855,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    loadTasksFromFile(); // Eski file picker metodunu çağır
+                    loadTasksFromFile();
                   },
                   icon: Icon(Icons.file_open),
                   label: Text("Browse Files"),
@@ -639,54 +879,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }
   }
 
-  // Belirli bir JSON dosyasını yükleyen metod
-  Future<void> loadSpecificTaskFile(File file) async {
-    try {
-      String contents = await file.readAsString();
-      List<dynamic> jsonData = jsonDecode(contents);
-      
-      setState(() {
-        tasks = jsonData.map((task) => Map<String, dynamic>.from(task)).toList();
-        categorizedTasks = {
-          "Not Started": [],
-          "In Progress": [],
-          "Complete": [],
-        };
-        for (var task in tasks) {
-          String status = task["status"];
-          categorizedTasks[status]?.add(task);
-        }
-        sortTasksByDeadline(ascending: isAscending);
-        filteredTasks = tasks;
-      });
-      
-      String fileName = file.path.split('\\').last;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text("Successfully loaded: $fileName\n${tasks.length} task(s) imported"),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 3),
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error loading file: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // Eski loadTasksFromFile metodunu koruyalım (Browse Files butonu için)
+  // Load tasks from file
   Future<void> loadTasksFromFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -698,7 +891,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }
   }
 
-  // Gelişmiş kaydetme metodunu da ekleyelim
+  // Save tasks to directory - güncellenmiş (column settings dahil)
   Future<void> saveTasksToDirectoryAdvanced() async {
     if (tasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -715,12 +908,23 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     );
     
     if (selectedDirectory != null) {
-      // Dosya adı için dialog göster
       String fileName = await showSaveFileNameDialog() ?? "tasks";
       String timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       String fullFileName = "${fileName}_$timestamp.json";
       
-      String jsonString = jsonEncode(tasks);
+      // Task data ile birlikte column settings'i de kaydet
+      Map<String, dynamic> saveData = {
+        'tasks': tasks,
+        'columnSettings': {
+          'columnOrder': columnOrder,
+          'hiddenColumns': hiddenColumns,
+          'columnWidths': columnWidths,
+          'savedAt': DateTime.now().toIso8601String(),
+          'version': '1.0',
+        }
+      };
+      
+      String jsonString = jsonEncode(saveData);
       String fullPath = '$selectedDirectory/$fullFileName';
       
       try {
@@ -734,7 +938,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 Icon(Icons.save, color: Colors.white),
                 SizedBox(width: 8),
                 Expanded(
-                  child: Text("Saved successfully!\n$fullPath\n${tasks.length} task(s) exported"),
+                  child: Text("Saved successfully!\n$fullPath\n${tasks.length} task(s) + column settings exported"),
                 ),
               ],
             ),
@@ -753,7 +957,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     }
   }
 
-  // Dosya adı girme dialog'u
+  // Show save file name dialog
   Future<String?> showSaveFileNameDialog() async {
     TextEditingController fileNameController = TextEditingController(text: "tasks");
     
@@ -789,210 +993,667 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     );
   }
 
-  // AppBar'daki butonları güncelleyelim
+  // Save options dialog
+  void _showSaveOptionsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.save, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Save Options'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.update, color: Colors.green),
+                title: const Text('Update Current File'),
+                subtitle: Text(
+                  'Save to: ${lastLoadedFilePath!.split('\\').last}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _saveToCurrentFile();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.save_as, color: Colors.blue),
+                title: const Text('Save As New File'),
+                subtitle: const Text('Choose new location and name'),
+                onTap: () {
+                  Navigator.pop(context);
+                  saveTasksToDirectoryAdvanced();
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Save to current file - güncellenmiş (column settings dahil)
+  Future<void> _saveToCurrentFile() async {
+    if (lastLoadedFilePath == null) return;
+    
+    try {
+      // Task data ile birlikte column settings'i de kaydet
+      Map<String, dynamic> saveData = {
+        'tasks': tasks,
+        'columnSettings': {
+          'columnOrder': columnOrder,
+          'hiddenColumns': hiddenColumns,
+          'columnWidths': columnWidths,
+          'savedAt': DateTime.now().toIso8601String(),
+          'version': '1.0',
+        }
+      };
+      
+      String jsonString = jsonEncode(saveData);
+      File file = File(lastLoadedFilePath!);
+      await file.writeAsString(jsonString);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Updated: ${file.path.split('\\').last}\n${tasks.length} task(s) + column settings saved",
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error saving file: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // Dosya bilgilerini yükleme metodu - güncellenmiş
+  void _showFileInfoDialog() {
+    if (lastLoadedFilePath == null) return;
+    
+    File file = File(lastLoadedFilePath!);
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return FutureBuilder<FileStat>(
+          future: file.stat(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const AlertDialog(
+                title: Text('File Info'),
+                content: CircularProgressIndicator(),
+              );
+            }
+            
+            FileStat fileStat = snapshot.data!;
+            String fileSize = "${(fileStat.size / 1024).toStringAsFixed(1)} KB";
+            String lastModified = DateFormat('dd/MM/yyyy HH:mm:ss').format(fileStat.modified);
+            String lastAccessed = DateFormat('dd/MM/yyyy HH:mm:ss').format(fileStat.accessed);
+            
+            // Column settings info
+            bool hasCustomColumnSettings = !_isDefaultColumnSettings();
+            
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.info, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Text('File Information'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInfoRow('Name:', file.path.split('\\').last),
+                  _buildInfoRow('Path:', file.path),
+                  _buildInfoRow('Size:', fileSize),
+                  _buildInfoRow('Tasks:', '${tasks.length}'),
+                  _buildInfoRow('Hidden Columns:', '${hiddenColumns.length}'),
+                  _buildInfoRow('Custom Settings:', hasCustomColumnSettings ? 'Yes' : 'No'),
+                  _buildInfoRow('Last Modified:', lastModified),
+                  _buildInfoRow('Last Accessed:', lastAccessed),
+                ],
+              ),
+              actions: [
+                if (hasCustomColumnSettings)
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showResetColumnSettingsDialog();
+                    },
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Reset Columns'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.orange.shade700,
+                    ),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _reloadLastFile();
+                  },
+                  child: const Text('Reload'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Varsayılan column settings olup olmadığını kontrol eden metod
+  bool _isDefaultColumnSettings() {
+    List<String> defaultOrder = [
+      'title', 'deadline', 'category', 'priority', 
+      'status', 'effort', 'completionPercentage', 'actions'
+    ];
+    
+    Map<String, double> defaultWidths = {
+      'title': 3.0, 'deadline': 1.5, 'category': 1.5, 'priority': 1.0,
+      'status': 1.5, 'effort': 1.0, 'completionPercentage': 2.0, 'actions': 1.0,
+    };
+    
+    return columnOrder.toString() == defaultOrder.toString() &&
+           hiddenColumns.isEmpty &&
+           columnWidths.toString() == defaultWidths.toString();
+  }
+
+  // Column settings sıfırlama dialog'u
+  void _showResetColumnSettingsDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.refresh, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Reset Column Settings'),
+            ],
+          ),
+          content: const Text(
+            'This will reset all column settings (order, visibility, and widths) to default values. '
+            'Your tasks will not be affected.\n\n'
+            'Do you want to continue?'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() {
+                  _resetColumnSettingsToDefault();
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('Column settings reset to default'),
+                      ],
+                    ),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reset'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Info row builder helper
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Task Manager"),
+        title: Row(
+          children: [
+            const Text("Task Manager"),
+            if (lastLoadedFilePath != null)
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.description, 
+                           size: 14, 
+                           color: Colors.blue.shade700),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          lastLoadedFilePath!.split('\\').last,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
         actions: [
+          // Reload last file butonu
+          if (lastLoadedFilePath != null)
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: "Reload current file",
+              onPressed: _reloadLastFile,
+            ),
+          
+          // Save tasks butonu
           IconButton(
             icon: const Icon(Icons.save),
             tooltip: "Save tasks",
-            onPressed: saveTasksToDirectoryAdvanced,
+            onPressed: () async {
+              // Eğer son dosya varsa, direkt oraya kaydet seçeneği sun
+              if (lastLoadedFilePath != null) {
+                _showSaveOptionsDialog();
+              } else {
+                saveTasksToDirectoryAdvanced();
+              }
+            },
           ),
+          
+          // Load tasks butonu
           IconButton(
             icon: const Icon(Icons.folder_open),
             tooltip: "Load tasks",
             onPressed: showLoadTasksDialog,
           ),
+          
+          // Clear current file butonu
+          if (lastLoadedFilePath != null)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                switch (value) {
+                  case 'clear_file':
+                    await _clearLastLoadedFile();
+                    setState(() {
+                      tasks.clear();
+                      filteredTasks.clear();
+                      categorizedTasks = {
+                        "Not Started": [],
+                        "In Progress": [],
+                        "Complete": [],
+                      };
+                    });
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Cleared current file and tasks"),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                    break;
+                  case 'file_info':
+                    _showFileInfoDialog();
+                    break;
+                }
+              },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'file_info',
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18),
+                      SizedBox(width: 8),
+                      Text('File Info'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'clear_file',
+                  child: Row(
+                    children: [
+                      Icon(Icons.clear, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Clear File', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: "Task List"),
-            Tab(text: "Status"),
-            Tab(text: "Reports"),
+          tabs: [
+            Tab(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isLoadingLastFile)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    const Icon(Icons.list, size: 18),
+                  const SizedBox(width: 4),
+                  const Text("Task List"),
+                ],
+              ),
+            ),
+            const Tab(text: "Status"),
+            const Tab(text: "Reports"),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // 1. Tab: Görev Listesi (New Task butonu ile)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          "Task List",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: showAddTaskDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text("New Task"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  buildFilterSection(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      body: isLoadingLastFile
+        ? const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text("Loading last file..."),
+              ],
+            ),
+          )
+        : TabBarView(
+            controller: _tabController,
+            children: [
+              // 1. Tab: Görev Listesi (New Task butonu ile)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Column(
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            isTableView = false;
-                          });
-                        },
-                        icon: const Icon(Icons.list, color: Colors.white),
-                        label: const Text("List View"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: !isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
-                          foregroundColor: Colors.white,
-                          elevation: !isTableView ? 3 : 1,
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Task List",
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: showAddTaskDialog,
+                              icon: const Icon(Icons.add),
+                              label: const Text("New Task"),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            isTableView = true;
-                          });
-                        },
-                        icon: const Icon(Icons.grid_on, color: Colors.white),
-                        label: const Text("Table View"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
-                          foregroundColor: Colors.white,
-                          elevation: isTableView ? 3 : 1,
-                        ),
+                      buildFilterSection(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                isTableView = false;
+                              });
+                            },
+                            icon: const Icon(Icons.list, color: Colors.white),
+                            label: const Text("List View"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: !isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
+                              foregroundColor: Colors.white,
+                              elevation: !isTableView ? 3 : 1,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                isTableView = true;
+                              });
+                            },
+                            icon: const Icon(Icons.grid_on, color: Colors.white),
+                            label: const Text("Table View"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
+                              foregroundColor: Colors.white,
+                              elevation: isTableView ? 3 : 1,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  Expanded(
-                    child: isTableView
-                        ? buildDraggableDataTable()
-                        : ListView.builder(
-                            itemCount: filteredTasks.length,
-                            itemBuilder: (context, index) {
-                              var task = filteredTasks[index];
-                              DateTime deadlineDate = DateTime.parse(task['deadline']);
-                              int completionPercentage = task["completionPercentage"];
-                              return Card(
-                                elevation: 2,
-                                margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                child: ListTile(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => TaskDetailScreen(task: task),
-                                      ),
-                                    ).then((updatedTask) {
-                                      if (updatedTask != null) {
-                                        setState(() {
-                                          int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
-                                          if (taskIndex != -1) {
-                                            tasks[taskIndex] = updatedTask;
-                                          }
-                                          if (filterDate != null) {
-                                            filterTasksByDate(filterDate!);
-                                          }
-                                          if (selectedCategory.isNotEmpty) {
-                                            filterTasksByCategory(selectedCategory);
+                      Expanded(
+                        child: isTableView
+                            ? buildDraggableDataTable()
+                            : ListView.builder(
+                                itemCount: filteredTasks.length,
+                                itemBuilder: (context, index) {
+                                  var task = filteredTasks[index];
+                                  DateTime deadlineDate = DateTime.parse(task['deadline']);
+                                  int completionPercentage = task["completionPercentage"];
+                                  return Card(
+                                    elevation: 2,
+                                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    child: ListTile(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => TaskDetailScreen(task: task),
+                                          ),
+                                        ).then((result) {
+                                          if (result != null && result is Map<String, dynamic>) {
+                                            String action = result['action'];
+                                            Map<String, dynamic> taskData = result['task'];
+                                            
+                                            setState(() {
+                                              if (action == 'update') {
+                                                // Mevcut task'ı güncelle - title ile eşleştirme yerine index kullan
+                                                int taskIndex = tasks.indexOf(task); // Orijinal task'ın index'ini al
+                                                if (taskIndex != -1) {
+                                                  tasks[taskIndex] = taskData; // Yeni verilerle değiştir
+                                                  
+                                                  // Categorized tasks'ı da güncelle
+                                                  categorizedTasks = {
+                                                    "Not Started": [],
+                                                    "In Progress": [],
+                                                    "Complete": [],
+                                                  };
+                                                  for (var t in tasks) {
+                                                    String status = t["status"];
+                                                    categorizedTasks[status]?.add(t);
+                                                  }
+                                                
+                                                  sortTasksByDeadline(ascending: isAscending);
+                                                
+                                                  // Filtreleri yeniden uygula
+                                                  if (filterDate != null) {
+                                                    filterTasksByDate(filterDate!);
+                                                  } else if (selectedCategory.isNotEmpty) {
+                                                    filterTasksByCategory(selectedCategory);
+                                                  } else {
+                                                    filteredTasks = tasks;
+                                                  }
+                                                }
+                                              } else if (action == 'create') {
+                                                // Yeni task oluştur
+                                                tasks.add(taskData);
+                                                categorizedTasks[taskData["status"]]?.add(taskData);
+                                                sortTasksByDeadline(ascending: isAscending);
+                                                
+                                                // Filtreleri yeniden uygula
+                                                if (filterDate != null) {
+                                                  filterTasksByDate(filterDate!);
+                                                } else if (selectedCategory.isNotEmpty) {
+                                                  filterTasksByCategory(selectedCategory);
+                                                } else {
+                                                  filteredTasks = tasks;
+                                                }
+                                              }
+                                            });
+                                            
+                                            // Dosya değiştirildi işareti
+                                            _markFileAsModified();
                                           }
                                         });
-                                      }
-                                    });
-                                  },
-                                  title: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        task["title"],
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      if (task["description"] != null && task["description"].toString().isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Text(
-                                            task["description"],
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade600,
-                                              fontWeight: FontWeight.normal,
+                                      },
+                                      title: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            task["title"],
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)} • Effort: ${task['effort']} hour",
-                                      ),
-                                      if (task["category"] != null && task["category"].toString().isNotEmpty)
-                                        Text("Category: ${task["category"]}"),
-                                      if (task["priority"] != null && task["priority"].toString().isNotEmpty)
-                                        Text("Priority: ${task["priority"]}"),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: List.generate(4, (barIndex) {
-                                          return Expanded(
-                                            child: Container(
-                                              height: 10,
-                                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                                              color: barIndex < (completionPercentage / 25)
-                                                  ? (completionPercentage == 25 ? Colors.grey
-                                                    : completionPercentage == 50 ? Colors.red
-                                                    : completionPercentage == 75 ? Colors.blue
-                                                    : completionPercentage == 100 ? Colors.green
-                                                    : Colors.grey[300])
-                                                  : Colors.grey[300],
+                                          if (task["description"] != null && task["description"].toString().isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Text(
+                                                task["description"],
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey.shade600,
+                                                  fontWeight: FontWeight.normal,
+                                                ),
+                                              ),
                                             ),
-                                          );
-                                        }),
+                                        ],
                                       ),
-                                      const SizedBox(height: 4),
-                                      Text("$completionPercentage%"),
-                                    ],
-                                  ),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () {
-                                      confirmDeleteTask(context, task);
-                                    },
-                                  ),
-                              ));
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "Deadline: ${DateFormat('dd/MM/yyyy').format(deadlineDate)} • Effort: ${task['effort']} hour",
+                                          ),
+                                          if (task["category"] != null && task["category"].toString().isNotEmpty)
+                                            Text("Category: ${task["category"]}"),
+                                          if (task["priority"] != null && task["priority"].toString().isNotEmpty)
+                                            Text("Priority: ${task["priority"]}"),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: List.generate(4, (barIndex) {
+                                              return Expanded(
+                                                child: Container(
+                                                  height: 10,
+                                                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                                                  color: barIndex < (completionPercentage / 25)
+                                                      ? (completionPercentage == 25 ? Colors.grey
+                                                        : completionPercentage == 50 ? Colors.red
+                                                        : completionPercentage == 75 ? Colors.blue
+                                                        : completionPercentage == 100 ? Colors.green
+                                                        : Colors.grey[300])
+                                                      : Colors.grey[300],
+                                                ),
+                                              );
+                                            }),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text("$completionPercentage%"),
+                                        ],
+                                      ),
+                                      trailing: IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red),
+                                        onPressed: () {
+                                          confirmDeleteTask(context, task);
+                                        },
+                                      ),
+                                  ));
+                                },
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              // 2. Tab: Görev Statüleri
+              buildStatusTab(),
+              // 3. Tab: Reports (YENİ)
+              DraggableReportsTab(tasks: tasks),
+            ],
           ),
-          // 2. Tab: Görev Statüleri
-          buildStatusTab(),
-          // 3. Tab: Reports (YENİ)
-          DraggableReportsTab(tasks: tasks),
-        ],
-      ),
     );
   }
 
@@ -1035,7 +1696,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 setState(() {
                   selectedFilterColumn = newValue ?? '';
                   filterController.clear();
-                  filteredTasks = tasks;
+                  filteredTasks = List.from(tasks);
                 });
               },
             ),
@@ -1061,7 +1722,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
               setState(() {
                 selectedFilterColumn = '';
                 filterController.clear();
-                filteredTasks = tasks;
+                filteredTasks = List.from(tasks);
                 filterDate = null;
                 filterDateType = ''; // Date filter type'ı da temizle
                 selectedCategory = '';
@@ -1080,51 +1741,43 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     
     return Column(
       children: [
-        // Kontrol butonları
+        // Kontrol butonları - başlık kaldırıldı
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end, // Sadece sağa yasla
             children: [
-              const Text(
-                'Table View',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              // Filter by Date butonu (küçük) - güncellenmiş
+              ElevatedButton.icon(
+                onPressed: _showDateFilterDialog,
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                  _getDateFilterLabel(),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: filterDate != null || filterDateType.isNotEmpty
+                    ? Colors.orange.shade100 
+                    : Colors.grey.shade100,
+                  foregroundColor: filterDate != null || filterDateType.isNotEmpty
+                    ? Colors.orange.shade700 
+                    : Colors.grey.shade700,
+                  elevation: 1,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
               ),
-              Row(
-                children: [
-                  // Filter by Date butonu (küçük) - güncellenmiş
-                  ElevatedButton.icon(
-                    onPressed: _showDateFilterDialog,
-                    icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text(
-                      _getDateFilterLabel(),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: filterDate != null || filterDateType.isNotEmpty
-                        ? Colors.orange.shade100 
-                        : Colors.grey.shade100,
-                      foregroundColor: filterDate != null || filterDateType.isNotEmpty
-                        ? Colors.orange.shade700 
-                        : Colors.grey.shade700,
-                      elevation: 1,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Column Order butonu
-                  ElevatedButton.icon(
-                    onPressed: _showColumnOrderDialog,
-                    icon: const Icon(Icons.view_column, size: 16),
-                    label: const Text('Columns', style: TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade100,
-                      foregroundColor: Colors.blue.shade700,
-                      elevation: 1,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              // Column Order butonu
+              ElevatedButton.icon(
+                onPressed: _showColumnOrderDialog,
+                icon: const Icon(Icons.view_column, size: 16),
+                label: const Text('Columns', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade100,
+                  foregroundColor: Colors.blue.shade700,
+                  elevation: 1,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
               ),
             ],
           ),
@@ -1448,7 +2101,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     setState(() {
       filterDateType = '';
       filterDate = null;
-      filteredTasks = tasks;
+      filteredTasks = List.from(tasks);
     });
   }
 
@@ -1840,6 +2493,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                           borderRadius: BorderRadius.circular(4),
                                           border: Border.all(color: Colors.grey.shade300),
                                         ),
+                                       
                                         child: Row(
                                           children: [
                                             Icon(Icons.info_outline, 
@@ -2270,48 +2924,21 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
             ],
           );
         }).toList(),
-      ),
-    );
+    ));
   }
 
   // Cell content builder
   Widget _buildCellContent(String columnKey, Map<String, dynamic> task, DateTime deadline, int cp) {
     switch (columnKey) {
       case 'title':
-        return InkWell(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TaskDetailScreen(task: task),
-              ),
-            ).then((updatedTask) {
-              if (updatedTask != null) {
-                setState(() {
-                  int taskIndex = tasks.indexWhere((t) => t["title"] == updatedTask["title"]);
-                  if (taskIndex != -1) {
-                    tasks[taskIndex] = updatedTask;
-                  }
-                  if (filterDate != null) {
-                    filterTasksByDate(filterDate!);
-                  }
-                  if (selectedCategory.isNotEmpty) {
-                    filterTasksByCategory(selectedCategory);
-                  }
-                });
-              }
-            });
-          },
-          child: Tooltip(
-            message: task['title'],
-            child: Text(
-              task['title'],
-              style: const TextStyle(
-                color: Colors.blue,
-                decoration: TextDecoration.underline,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
+        return Tooltip(
+          message: task['title'],
+          child: Text(
+            task['title'],
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
             ),
           ),
         );
@@ -2399,13 +3026,87 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
           ],
         );
       case 'actions':
-        return Center(
-          child: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-            onPressed: () {
-              confirmDeleteTask(context, task);
-            },
-          ),
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Edit butonu
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+              tooltip: 'Edit Task',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TaskDetailScreen(task: task),
+                  ),
+                ).then((result) {
+                  if (result != null && result is Map<String, dynamic>) {
+                    String action = result['action'];
+                    Map<String, dynamic> taskData = result['task'];
+                    
+                    setState(() {
+                      if (action == 'update') {
+                        // Mevcut task'ı güncelle
+                        int taskIndex = tasks.indexOf(task);
+                        if (taskIndex != -1) {
+                          tasks[taskIndex] = taskData;
+                          
+                          // Categorized tasks'ı da güncelle
+                          categorizedTasks = {
+                            "Not Started": [],
+                            "In Progress": [],
+                            "Complete": [],
+                          };
+                          for (var t in tasks) {
+                            String status = t["status"];
+                            categorizedTasks[status]?.add(t);
+                          }
+                        
+                          sortTasksByDeadline(ascending: isAscending);
+                        
+                          // Filtreleri yeniden uygula
+                          if (filterDate != null) {
+                            filterTasksByDate(filterDate!);
+                          } else if (selectedCategory.isNotEmpty) {
+                            filterTasksByCategory(selectedCategory);
+                          } else {
+                            filteredTasks = List.from(tasks);
+                          }
+                        }
+                      } else if (action == 'create') {
+                        // Yeni task oluştur
+                        tasks.add(taskData);
+                        categorizedTasks[taskData["status"]]?.add(taskData);
+                        sortTasksByDeadline(ascending: isAscending);
+                        
+                        // Filtreleri yeniden uygula
+                        if (filterDate != null) {
+                          filterTasksByDate(filterDate!);
+                        } else if (selectedCategory.isNotEmpty) {
+                          filterTasksByCategory(selectedCategory);
+                        } else {
+                          filteredTasks = List.from(tasks);
+                        }
+                      }
+                    });
+                    
+                    // Dosya değiştirildi işareti
+                    _markFileAsModified();
+                  }
+                });
+              },
+            ),
+            const SizedBox(width: 4),
+            // Delete butonu
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+              tooltip: 'Delete Task',
+              onPressed: () {
+                confirmDeleteTask(context, task);
+              },
+            ),
+          ],
         );
       default:
         return Text(
@@ -2414,5 +3115,107 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         );
     }
   }
+
+// Eksik olan metodları ekleyin (class'ın sonuna ekleyin):
+
+// Column settings yükleme metodu
+void _loadColumnSettings(Map<String, dynamic> columnSettings) {
+  try {
+    // Column order
+    if (columnSettings.containsKey('columnOrder')) {
+      List<dynamic> orderList = columnSettings['columnOrder'];
+      columnOrder = orderList.cast<String>();
+      
+      // Mevcut sütunlarla uyumluluğu kontrol et
+      List<String> validColumns = [
+        'title', 'deadline', 'category', 'priority', 
+        'status', 'effort', 'completionPercentage', 'actions'
+      ];
+      
+      // Eksik sütunları ekle
+      for (String col in validColumns) {
+        if (!columnOrder.contains(col)) {
+          columnOrder.add(col);
+        }
+      }
+      
+      // Geçersiz sütunları kaldır
+      columnOrder.removeWhere((col) => !validColumns.contains(col));
+    }
+    
+    // Hidden columns
+    if (columnSettings.containsKey('hiddenColumns')) {
+      List<dynamic> hiddenList = columnSettings['hiddenColumns'];
+      hiddenColumns = hiddenList.cast<String>();
+      
+      // Actions sütununun gizlenememesi için kontrol
+      hiddenColumns.remove('actions');
+    }
+    
+    // Column widths
+    if (columnSettings.containsKey('columnWidths')) {
+      Map<String, dynamic> widthsMap = columnSettings['columnWidths'];
+      columnWidths = widthsMap.map((key, value) => 
+          MapEntry(key, (value as num).toDouble()));
+      
+      // Eksik sütun genişliklerini varsayılan değerlerle doldur
+      Map<String, double> defaultWidths = {
+        'title': 3.0,
+        'deadline': 1.5,
+        'category': 1.5,
+        'priority': 1.0,
+        'status': 1.5,
+        'effort': 1.0,
+        'completionPercentage': 2.0,
+        'actions': 1.0,
+      };
+      
+      for (String key in defaultWidths.keys) {
+        if (!columnWidths.containsKey(key)) {
+          columnWidths[key] = defaultWidths[key]!;
+        }
+      }
+      
+      // Minimum genişlik kontrolü
+      for (String key in columnWidths.keys) {
+        double minWidth = _getMinimumColumnWidth(key);
+        if (columnWidths[key]! < minWidth) {
+          columnWidths[key] = minWidth;
+        }
+      }
+    }
+    
+    print('Column settings loaded successfully');
+  } catch (e) {
+    print('Error loading column settings: $e');
+    _resetColumnSettingsToDefault();
+  }
 }
 
+// Column settings'i varsayılan değerlere sıfırlama metodu
+void _resetColumnSettingsToDefault() {
+  columnOrder = [
+    'title',
+    'deadline', 
+    'category',
+    'priority',
+    'status',
+    'effort',
+    'completionPercentage',
+    'actions'
+  ];
+  
+  hiddenColumns = [];
+  
+  columnWidths = {
+    'title': 3.0,
+    'deadline': 1.5,
+    'category': 1.5,
+    'priority': 1.0,
+    'status': 1.5,
+    'effort': 1.0,
+    'completionPercentage': 2.0,
+    'actions': 1.0,
+  };
+}
+}
