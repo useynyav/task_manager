@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_application_1/draggablereport.dart';
 import 'package:flutter_application_1/screens/task_detail_screen.dart';
+import 'package:flutter_application_1/detail_view_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -129,6 +130,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
   // Eksik olan değişkenler
   String? lastLoadedFilePath;
   bool isLoadingLastFile = false;
+  bool isDetailView = false;
 
   @override
   void initState() {
@@ -1278,6 +1280,50 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     );
   }
 
+  // Control button builder - tutarlı buton tasarımı için
+  Widget _buildControlButton({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      height: 48, // Sabit yükseklik
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          size: 18,
+          color: isSelected ? Colors.white : color,
+        ),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: isSelected ? Colors.white : color,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected ? color : Colors.white,
+          foregroundColor: isSelected ? Colors.white : color,
+          elevation: isSelected ? 3 : 1,
+          shadowColor: color.withOpacity(0.3),
+          side: BorderSide(
+            color: isSelected ? color : color.withOpacity(0.3),
+            width: 1.5,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1441,11 +1487,12 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         : TabBarView(
             controller: _tabController,
             children: [
-              // 1. Tab: Görev Listesi (New Task butonu ile)
+              // 1. Tab: Görev Listesi
               LayoutBuilder(
                 builder: (context, constraints) {
                   return Column(
                     children: [
+                      // Header Section
                       Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Row(
@@ -1467,41 +1514,123 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                           ],
                         ),
                       ),
+                      
+                      // Filter Section
                       buildFilterSection(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                isTableView = false;
-                              });
-                            },
-                            icon: const Icon(Icons.list, color: Colors.white),
-                            label: const Text("List View"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: !isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
-                              foregroundColor: Colors.white,
-                              elevation: !isTableView ? 3 : 1,
+                      
+                      // Button Control Panel - YENİ DÜZENLİ ALAN
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.shade200,
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              setState(() {
-                                isTableView = true;
-                              });
-                            },
-                            icon: const Icon(Icons.grid_on, color: Colors.white),
-                            label: const Text("Table View"),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isTableView ? Colors.blue.shade600 : Colors.grey.shade500,
-                              foregroundColor: Colors.white,
-                              elevation: isTableView ? 3 : 1,
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Buton grubu
+                            Row(
+                              children: [
+                                // List View / Table View / Detail View Toggle Buttons
+                                Expanded(
+                                  flex: 3,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildControlButton(
+                                          icon: Icons.list,
+                                          label: "List",
+                                          isSelected: !isTableView && !isDetailView,
+                                          color: Colors.blue,
+                                          onPressed: () {
+                                            setState(() {
+                                              isTableView = false;
+                                              isDetailView = false;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: _buildControlButton(
+                                          icon: Icons.grid_on,
+                                          label: "Table",
+                                          isSelected: isTableView,
+                                          color: Colors.blue,
+                                          onPressed: () {
+                                            setState(() {
+                                              isTableView = true;
+                                              isDetailView = false;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: _buildControlButton(
+                                          icon: Icons.view_sidebar,
+                                          label: "Detail",
+                                          isSelected: isDetailView,
+                                          color: Colors.blue,
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => DetailViewScreen(tasks: tasks),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                
+                                const SizedBox(width: 12),
+                                
+                                // Date Filter Button
+                                Expanded(
+                                  child: _buildControlButton(
+                                    icon: Icons.calendar_today,
+                                    label: _getDateFilterLabel(),
+                                    isSelected: filterDate != null || filterDateType.isNotEmpty,
+                                    color: Colors.orange,
+                                    onPressed: _showDateFilterDialog,
+                                  ),
+                                ),
+                                
+                                const SizedBox(width: 6),
+                                
+                                // Columns Button (sadece table view'da görünür)
+                                if (isTableView)
+                                  Expanded(
+                                    child: _buildControlButton(
+                                      icon: Icons.view_column,
+                                      label: "Columns",
+                                      isSelected: false,
+                                      color: Colors.purple,
+                                      onPressed: _showColumnOrderDialog,
+                                    ),
+                                  ),
+                                
+                                // Eğer table view değilse, boş alan bırak
+                                if (!isTableView)
+                                  const Expanded(child: SizedBox()),
+                              ],
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      
+                      // Content Area
                       Expanded(
                         child: isTableView
                             ? buildDraggableDataTable()
@@ -1523,57 +1652,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                           ),
                                         ).then((result) {
                                           if (result != null && result is Map<String, dynamic>) {
-                                            String action = result['action'];
-                                            Map<String, dynamic> taskData = result['task'];
-                                            
-                                            setState(() {
-                                              if (action == 'update') {
-                                                // Mevcut task'ı güncelle - title ile eşleştirme yerine index kullan
-                                                int taskIndex = tasks.indexOf(task); // Orijinal task'ın index'ini al
-                                                if (taskIndex != -1) {
-                                                  tasks[taskIndex] = taskData; // Yeni verilerle değiştir
-                                                  
-                                                  // Categorized tasks'ı da güncelle
-                                                  categorizedTasks = {
-                                                    "Not Started": [],
-                                                    "In Progress": [],
-                                                    "Complete": [],
-                                                  };
-                                                  for (var t in tasks) {
-                                                    String status = t["status"];
-                                                    categorizedTasks[status]?.add(t);
-                                                  }
-                                                
-                                                  sortTasksByDeadline(ascending: isAscending);
-                                                
-                                                  // Filtreleri yeniden uygula
-                                                  if (filterDate != null) {
-                                                    filterTasksByDate(filterDate!);
-                                                  } else if (selectedCategory.isNotEmpty) {
-                                                    filterTasksByCategory(selectedCategory);
-                                                  } else {
-                                                    filteredTasks = tasks;
-                                                  }
-                                                }
-                                              } else if (action == 'create') {
-                                                // Yeni task oluştur
-                                                tasks.add(taskData);
-                                                categorizedTasks[taskData["status"]]?.add(taskData);
-                                                sortTasksByDeadline(ascending: isAscending);
-                                                
-                                                // Filtreleri yeniden uygula
-                                                if (filterDate != null) {
-                                                  filterTasksByDate(filterDate!);
-                                                } else if (selectedCategory.isNotEmpty) {
-                                                  filterTasksByCategory(selectedCategory);
-                                                } else {
-                                                  filteredTasks = tasks;
-                                                }
-                                              }
-                                            });
-                                            
-                                            // Dosya değiştirildi işareti
-                                            _markFileAsModified();
+                                            _handleTaskEditResult(result, task);
                                           }
                                         });
                                       },
@@ -1741,54 +1820,18 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
     
     return Column(
       children: [
-        // Kontrol butonları - başlık kaldırıldı
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end, // Sadece sağa yasla
-            children: [
-              // Filter by Date butonu (küçük) - güncellenmiş
-              ElevatedButton.icon(
-                onPressed: _showDateFilterDialog,
-                icon: const Icon(Icons.calendar_today, size: 16),
-                label: Text(
-                  _getDateFilterLabel(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: filterDate != null || filterDateType.isNotEmpty
-                    ? Colors.orange.shade100 
-                    : Colors.grey.shade100,
-                  foregroundColor: filterDate != null || filterDateType.isNotEmpty
-                    ? Colors.orange.shade700 
-                    : Colors.grey.shade700,
-                  elevation: 1,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Column Order butonu
-              ElevatedButton.icon(
-                onPressed: _showColumnOrderDialog,
-                icon: const Icon(Icons.view_column, size: 16),
-                label: const Text('Columns', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade100,
-                  foregroundColor: Colors.blue.shade700,
-                  elevation: 1,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-            ],
-          ),
-        ),
-        
+        // Kontrol butonları kaldırıldı - artık yukarıdaki panel'de
+      
         // Custom Table Header
         Container(
           height: 56,
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
             border: Border.all(color: Colors.grey.shade300),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(8),
+              topRight: Radius.circular(8),
+            ),
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -1799,15 +1842,24 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
         
         // Table Body
         Expanded(
-          child: SingleChildScrollView(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return Column(
-                  children: filteredTasks.map((task) => 
-                    _buildCustomDataRow(task, visibleColumns, constraints.maxWidth)
-                  ).toList(),
-                );
-              },
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(8),
+                bottomRight: Radius.circular(8),
+              ),
+            ),
+            child: SingleChildScrollView(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Column(
+                    children: filteredTasks.map((task) => 
+                      _buildCustomDataRow(task, visibleColumns, constraints.maxWidth)
+                    ).toList(),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -2346,61 +2398,15 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  // Move Up/Down butonları
-                                  IconButton(
-                                    icon: const Icon(Icons.keyboard_arrow_up, size: 16),
-                                    onPressed: index > 0 ? () {
-                                      setDialogState(() {
-                                        String item = tempColumnOrder.removeAt(index);
-                                        tempColumnOrder.insert(index - 1, item);
-                                      });
-                                    } : null,
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.keyboard_arrow_down, size: 16),
-                                    onPressed: index < tempColumnOrder.length - 1 ? () {
-                                      setDialogState(() {
-                                        String item = tempColumnOrder.removeAt(index);
-                                        tempColumnOrder.insert(index + 1, item);
-                                      });
-                                    } : null,
-                                  ),
                                 ],
                               ),
                               title: Text(
                                 columnTitles[columnKey] ?? columnKey,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: isVisible ? Colors.black87 : Colors.grey.shade500,
-                                  decoration: isVisible ? null : TextDecoration.lineThrough,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
                                 ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Checkbox(
-                                    value: isVisible,
-                                    onChanged: columnKey == 'actions' ? null : (bool? value) {
-                                      setDialogState(() {
-                                        if (value == true) {
-                                          tempHiddenColumns.remove(columnKey);
-                                        } else {
-                                          tempHiddenColumns.add(columnKey);
-                                        }
-                                      });
-                                    },
-                                    activeColor: Colors.blue.shade600,
-                                  ),
-                                  Text(
-                                    isVisible ? 'Show' : 'Hide',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: isVisible ? Colors.green.shade600 : Colors.red.shade600,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                                overflow: TextOverflow.ellipsis,
                               ),
                               children: [
                                 Padding(
@@ -2461,7 +2467,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                           _buildPresetButton(
                                             'Normal',
                                             (minWidth + 1.5) > 5.0 ? 5.0 : (minWidth + 1.5),
-                                            Colors.orange.shade600,
+                                                                                       Colors.orange.shade600,
                                             columnKey,
                                             tempColumnWidths,
                                             setDialogState,
@@ -2484,7 +2490,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
+                                                                           const SizedBox(height: 8),
                                       // Width preview - güncellenmiş bilgi
                                       Container(
                                         padding: const EdgeInsets.all(8),
@@ -2534,7 +2540,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                       child: Row(
                         children: [
                           Icon(Icons.warning_amber_outlined, 
-                               size: 16, 
+                               size:  16, 
                                color: Colors.orange.shade600),
                           const SizedBox(width: 8),
                           Expanded(
@@ -2790,11 +2796,11 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                                         ],
                                       ),
                                     ),
-                                  ),
-                                );
-                              },
+                                   )   );
+                                },
+                 ),
                             ),
-                          ),
+                          
                         ],
                       ),
                     );
@@ -3014,7 +3020,8 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                 cp == 0 ? Colors.grey :
                 cp <= 25 ? Colors.red :
                 cp <= 50 ? Colors.orange :
-                cp <= 75 ? Colors.blue : Colors.green,
+                cp <= 75 ? Colors.blue :
+                Colors.green,
               ),
               minHeight: 6,
             ),
@@ -3042,57 +3049,7 @@ class _TaskManagerScreenState extends State<TaskManagerScreen> with SingleTicker
                   ),
                 ).then((result) {
                   if (result != null && result is Map<String, dynamic>) {
-                    String action = result['action'];
-                    Map<String, dynamic> taskData = result['task'];
-                    
-                    setState(() {
-                      if (action == 'update') {
-                        // Mevcut task'ı güncelle
-                        int taskIndex = tasks.indexOf(task);
-                        if (taskIndex != -1) {
-                          tasks[taskIndex] = taskData;
-                          
-                          // Categorized tasks'ı da güncelle
-                          categorizedTasks = {
-                            "Not Started": [],
-                            "In Progress": [],
-                            "Complete": [],
-                          };
-                          for (var t in tasks) {
-                            String status = t["status"];
-                            categorizedTasks[status]?.add(t);
-                          }
-                        
-                          sortTasksByDeadline(ascending: isAscending);
-                        
-                          // Filtreleri yeniden uygula
-                          if (filterDate != null) {
-                            filterTasksByDate(filterDate!);
-                          } else if (selectedCategory.isNotEmpty) {
-                            filterTasksByCategory(selectedCategory);
-                          } else {
-                            filteredTasks = List.from(tasks);
-                          }
-                        }
-                      } else if (action == 'create') {
-                        // Yeni task oluştur
-                        tasks.add(taskData);
-                        categorizedTasks[taskData["status"]]?.add(taskData);
-                        sortTasksByDeadline(ascending: isAscending);
-                        
-                        // Filtreleri yeniden uygula
-                        if (filterDate != null) {
-                          filterTasksByDate(filterDate!);
-                        } else if (selectedCategory.isNotEmpty) {
-                          filterTasksByCategory(selectedCategory);
-                        } else {
-                          filteredTasks = List.from(tasks);
-                        }
-                      }
-                    });
-                    
-                    // Dosya değiştirildi işareti
-                    _markFileAsModified();
+                    _handleTaskEditResult(result, task);
                   }
                 });
               },
@@ -3218,4 +3175,121 @@ void _resetColumnSettingsToDefault() {
     'actions': 1.0,
   };
 }
+
+
+// Class'ın sonuna bu metodu ekleyin:
+
+// Task edit result'ını işleyen ortak metod
+void _handleTaskEditResult(Map<String, dynamic> result, Map<String, dynamic>? originalTask) {
+  String action = result['action'];
+  Map<String, dynamic> taskData = result['task'];
+  
+  setState(() {
+    if (action == 'update') {
+      // Mevcut task'ı güncelle
+      int taskIndex = -1;
+      
+      if (originalTask != null) {
+        // Orijinal task referansı varsa onu kullan
+        taskIndex = tasks.indexOf(originalTask);
+      } else {
+        // Yoksa title ile ara (detail view'dan geliyorsa)
+        taskIndex = tasks.indexWhere((t) => t['title'] == taskData['title']);
+      }
+      
+      if (taskIndex != -1) {
+        tasks[taskIndex] = taskData;
+        
+        // Categorized tasks'ı da güncelle
+        categorizedTasks = {
+          "Not Started": [],
+          "In Progress": [],
+          "Complete": [],
+        };
+        for (var t in tasks) {
+          String status = t["status"];
+          categorizedTasks[status]?.add(t);
+        }
+        
+        sortTasksByDeadline(ascending: isAscending);
+        
+        // Filtreleri yeniden uygula
+        if (filterDate != null) {
+          filterTasksByDate(filterDate!);
+        } else if (selectedCategory.isNotEmpty) {
+          filterTasksByCategory(selectedCategory);
+        } else {
+          filteredTasks = List.from(tasks);
+        }
+      }
+    } else if (action == 'create') {
+      // Yeni task oluştur
+      tasks.add(taskData);
+      categorizedTasks[taskData["status"]]?.add(taskData);
+      sortTasksByDeadline(ascending: isAscending);
+      
+      // Filtreleri yeniden uygula
+      if (filterDate != null) {
+        filterTasksByDate(filterDate!);
+      } else if (selectedCategory.isNotEmpty) {
+        filterTasksByCategory(selectedCategory);
+      } else {
+        filteredTasks = List.from(tasks);
+      }
+    } else if (action == 'delete') {
+      // Task'ı sil
+      tasks.removeWhere((t) => t == taskData);
+      
+      // Categorized tasks'ı da güncelle
+      categorizedTasks = {
+        "Not Started": [],
+        "In Progress": [],
+        "Complete": [],
+      };
+      for (var t in tasks) {
+        String status = t["status"];
+        categorizedTasks[status]?.add(t);
+      }
+      
+      sortTasksByDeadline(ascending: isAscending);
+      
+      // Filtreleri yeniden uygula
+      if (filterDate != null) {
+        filterTasksByDate(filterDate!);
+      } else if (selectedCategory.isNotEmpty) {
+        filterTasksByCategory(selectedCategory);
+      } else {
+        filteredTasks = List.from(tasks);
+      }
+    }
+  });
+  
+  // Dosya değiştirildi işareti
+  _markFileAsModified();
+  
+  // Başarı mesajı
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              action == 'delete' ? Icons.delete : Icons.check_circle,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              action == 'update' ? 'Task updated successfully!' :
+              action == 'create' ? 'New task created successfully!' :
+              'Task deleted successfully!',
+            ),
+          ],
+        ),
+        backgroundColor: action == 'delete' ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 }
+}
+
